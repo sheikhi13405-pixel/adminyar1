@@ -1,0 +1,1286 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>ادمین‌یار — مدیریت هوشمند پیج اینستاگرام</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css"/>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config={theme:{extend:{
+  colors:{navy:{950:'#05081C',900:'#0A0F2E',800:'#0F1638',700:'#161F4E',600:'#232D6B'}},
+  fontFamily:{sans:['Vazirmatn','sans-serif']},
+  boxShadow:{neon:'0 0 18px rgba(34,211,238,.35)',glow:'0 4px 24px rgba(124,58,237,.35)'}
+}}};
+</script>
+<style>
+  html{scrollbar-color:#232d6b #05081c}
+  body{background:#05081c;color:#e2e8f0;font-family:Vazirmatn,sans-serif}
+  ::-webkit-scrollbar{width:8px;height:8px}
+  ::-webkit-scrollbar-thumb{background:#232d6b;border-radius:8px}
+  input[type=datetime-local]{color-scheme:dark}
+  .fade-up{animation:fadeUp .35s ease both}
+  @keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+</style>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" data-presets="react">
+const {useState,useEffect,useMemo,useRef,createContext,useContext} = React;
+
+/* ═══════════ ۱) ابزارها: اعداد فارسی + تقویم جلالی (جاسازی‌شده) ═══════════ */
+const faDigits = s => String(s).replace(/\d/g, d=>'۰۱۲۳۴۵۶۷۸۹'[d]);
+const faNum = n => Number(n).toLocaleString('fa-IR');
+const pad2 = n => String(n).padStart(2,'0');
+const fmtSize = b => faDigits((b/1048576).toFixed(1))+' مگابایت';
+
+const Jal=(()=>{
+  const breaks=[-61,9,38,199,426,686,756,818,1111,1181,1210,1635,2060,2097,2192,2262,2324,2394,2456,3178];
+  const div=(a,b)=>~~(a/b), mod=(a,b)=>a-~~(a/b)*b;
+  function jalCal(jy){
+    let gy=jy+621, leapJ=-14, jp=breaks[0], jm, jump=0, leap, leapG, march, n, i;
+    for(i=1;i<breaks.length;i++){ jm=breaks[i]; jump=jm-jp; if(jy<jm) break; leapJ+=div(jump,33)*8+div(mod(jump,33),4); jp=jm; }
+    n=jy-jp; leapJ+=div(n,33)*8+div(mod(n,33)+3,4);
+    if(mod(jump,33)===4 && jump-n===4) leapJ+=1;
+    leapG=div(gy,4)-div((div(gy,100)+1)*3,4)-150; march=20+leapJ-leapG;
+    if(jump-n<6) n=n-jump+div(jump+4,33)*33;
+    leap=mod(mod(n+1,33)-1,4); if(leap===-1) leap=4;
+    return {leap,gy,march};
+  }
+  function g2d(gy,gm,gd){ let d=div((gy+div(gm-8,6)+100100)*1461,4)+div(153*mod(gm+9,12)+2,5)+gd-34840408; return d-div(div(gy+100100+div(gm-8,6),100)*3,4)+752; }
+  function d2g(j){ j=4*j+139361631; j+=div(div(4*j+183187720,146097)*3,4)*4-3908; const i=div(mod(j,1461),4)*5+308; const gd=div(mod(i,153),5)+1, gm=mod(div(i,153),12)+1; return {gy:div(j,1461)-100100+div(8-gm,6),gm,gd}; }
+  function j2d(jy,jm,jd){ const r=jalCal(jy); return g2d(r.gy,3,r.march)+(jm-1)*31-div(jm,7)*(jm-7)+jd-1; }
+  function d2j(j){ let gy=d2g(j).gy, jy=gy-621; const r=jalCal(jy); let k=j-g2d(gy,3,r.march), jm, jd;
+    if(k>=0){ if(k<=185) return {jy,jm:1+div(k,31),jd:mod(k,31)+1}; k-=186; } else { jy-=1; k+=179; if(r.leap===1) k+=1; }
+    jm=7+div(k,30); jd=mod(k,30)+1; return {jy,jm,jd};
+  }
+  return {
+    toJal:(y,m,d)=>d2j(g2d(y,m,d)),
+    toGreg:(y,m,d)=>d2g(j2d(y,m,d)),
+    isLeap:y=>jalCal(y).leap===0,
+    monthLen:(y,m)=> m<=6?31 : m<=11?30 : (jalCal(y).leap===0?30:29)
+  };
+})();
+
+const MONTHS=['فروردین','اردیبهشت','خرداد','تیر','مرداد','شهریور','مهر','آبان','آذر','دی','بهمن','اسفند'];
+const WEEKDAYS=['ش','ی','د','س','چ','پ','ج'];
+function jDate(d){ d=new Date(d); const j=Jal.toJal(d.getFullYear(),d.getMonth()+1,d.getDate()); return faDigits(j.jy+'/'+pad2(j.jm)+'/'+pad2(j.jd)); }
+function jTime(d){ d=new Date(d); return faDigits(pad2(d.getHours())+':'+pad2(d.getMinutes())); }
+function dayKey(d){ d=new Date(d); return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate()); }
+function toLocalInput(d){ d=new Date(d); return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate())+'T'+pad2(d.getHours())+':'+pad2(d.getMinutes()); }
+function monthGrid(jy,jm){
+  const g=Jal.toGreg(jy,jm,1);
+  const first=new Date(g.gy,g.gm-1,g.gd);
+  const off=(first.getDay()+1)%7;
+  const start=new Date(first); start.setDate(start.getDate()-off);
+  return Array.from({length:42},(_,i)=>{
+    const dt=new Date(start); dt.setDate(start.getDate()+i);
+    const j=Jal.toJal(dt.getFullYear(),dt.getMonth()+1,dt.getDate());
+    return {date:dt, jd:j.jd, inMonth:j.jm===jm&&j.jy===jy, key:dayKey(dt)};
+  });
+}
+const uid=()=> (crypto.randomUUID ? crypto.randomUUID() : 'id-'+Date.now()+'-'+Math.random());
+
+/* ═══════════ ۲) ثابت‌ها ═══════════ */
+const ORDER_STATUS={
+  pending:{label:'در انتظار بررسی',cls:'bg-amber-500/15 text-amber-300 border-amber-400/30'},
+  rejected:{label:'رد شده',cls:'bg-rose-500/15 text-rose-300 border-rose-400/30'},
+  assigned:{label:'اختصاص‌یافته',cls:'bg-blue-500/15 text-blue-300 border-blue-400/30'},
+  in_progress:{label:'در حال انجام',cls:'bg-violet-500/15 text-violet-300 border-violet-400/30'},
+  delivered:{label:'تحویل‌شده',cls:'bg-cyan-500/15 text-cyan-300 border-cyan-400/30'},
+  revision_requested:{label:'درخواست اصلاح',cls:'bg-orange-500/15 text-orange-300 border-orange-400/30'},
+  approved:{label:'تأییدشده',cls:'bg-emerald-500/15 text-emerald-300 border-emerald-400/30'},
+  scheduled:{label:'زمان‌بندی‌شده',cls:'bg-sky-500/15 text-sky-300 border-sky-400/30'},
+  completed:{label:'تکمیل‌شده',cls:'bg-emerald-500/25 text-emerald-200 border-emerald-300/40'},
+  canceled:{label:'لغوشده',cls:'bg-slate-500/15 text-slate-300 border-slate-400/30'}
+};
+const SCHED_STATUS={
+  scheduled:{label:'زمان‌بندی‌شده',cls:'bg-sky-500/15 text-sky-300 border-sky-400/30',dot:'bg-sky-400'},
+  manual_ready:{label:'آماده انتشار دستی',cls:'bg-amber-500/15 text-amber-300 border-amber-400/30',dot:'bg-amber-400'},
+  published:{label:'منتشرشده',cls:'bg-emerald-500/15 text-emerald-300 border-emerald-400/30',dot:'bg-emerald-400'},
+  failed:{label:'ناموفق',cls:'bg-rose-500/15 text-rose-300 border-rose-400/30',dot:'bg-rose-400'}
+};
+const PAY_STATUS={
+  pending:{label:'در انتظار تأیید',cls:'bg-amber-500/15 text-amber-300 border-amber-400/30'},
+  paid:{label:'پرداخت‌شده',cls:'bg-emerald-500/15 text-emerald-300 border-emerald-400/30'},
+  failed:{label:'ناموفق',cls:'bg-rose-500/15 text-rose-300 border-rose-400/30'}
+};
+const ORDER_TYPES={edit_video:'تدوین ویدیو',raw_to_reel:'تبدیل فیلم خام به ریلز',design:'طراحی گرافیک',story_design:'طراحی استوری',caption_hashtag:'کپشن و هشتگ'};
+const FILE_KINDS={story:'استوری',post:'پست/اسلاید',reel:'ریلز',raw_video:'فیلم خام',deliverable:'خروجی نهایی'};
+const ROLE_LABELS={customer:'مشتری',super_admin:'مدیر کل',content_admin:'ادمین محتوا',editor:'تدوینگر',designer:'طراح گرافیک',support:'کارشناس پشتیبانی'};
+const SUB_BADGE={active:'bg-emerald-500/15 text-emerald-300',expired:'bg-rose-500/15 text-rose-300',unpaid:'bg-slate-500/15 text-slate-300',canceled:'bg-orange-500/15 text-orange-300'};
+const ADMIN_ROLES=['super_admin','content_admin','editor','designer','support'];
+
+/* ═══════════ ۳) لایه API (fetch + XHR برای پیشرفت آپلود) ═══════════ */
+async function request(method,p,body){
+  const headers={};
+  const t=localStorage.getItem('ay_token');
+  if(t) headers.Authorization='Bearer '+t;
+  let payload;
+  if(body!==undefined){ headers['Content-Type']='application/json'; payload=JSON.stringify(body); }
+  const res=await fetch('/api'+p,{method,headers,body:payload});
+  let data=null; try{ data=await res.json(); }catch(e){}
+  if(res.status===401){ localStorage.removeItem('ay_token'); localStorage.removeItem('ay_user'); if(!location.hash.startsWith('#/login')) location.hash='#/login'; }
+  if(res.status===402 && data && data.code==='SUBSCRIPTION_REQUIRED'){ location.hash='#/subscription'; }
+  if(!res.ok){ const err=new Error((data&&data.message)||('خطای '+res.status)); err.status=res.status; throw err; }
+  return data;
+}
+const api={get:p=>request('GET',p),post:(p,b)=>request('POST',p,b),put:(p,b)=>request('PUT',p,b),patch:(p,b)=>request('PATCH',p,b),del:p=>request('DELETE',p)};
+
+function uploadXHR(form,onProgress){
+  return new Promise((resolve,reject)=>{
+    const xhr=new XMLHttpRequest();
+    xhr.open('POST','/api/uploads');
+    const t=localStorage.getItem('ay_token'); if(t) xhr.setRequestHeader('Authorization','Bearer '+t);
+    xhr.upload.onprogress=e=>{ if(e.lengthComputable&&onProgress) onProgress(Math.round(e.loaded/e.total*100)); };
+    xhr.onerror=()=>reject(new Error('خطای شبکه'));
+    xhr.onload=()=>{ let d=null; try{d=JSON.parse(xhr.responseText);}catch(e){}
+      if(xhr.status>=200&&xhr.status<300) resolve(d);
+      else reject(new Error((d&&d.message)||'خطا در آپلود')); };
+    xhr.send(form);
+  });
+}
+async function downloadFile(id,name){
+  const t=localStorage.getItem('ay_token');
+  const res=await fetch('/api/uploads/'+id+'/download',{headers:t?{Authorization:'Bearer '+t}:{}});
+  if(!res.ok){ let d=null; try{d=await res.json();}catch(e){} throw new Error((d&&d.message)||'خطا در دانلود'); }
+  const blob=await res.blob();
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download=name||'file';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),2000);
+}
+
+/* ═══════════ ۴) Toast ═══════════ */
+const toastSet=new Set();
+function toast(msg,type){ toastSet.forEach(f=>f({msg,type:type||'success'})); }
+function ToastHost(){
+  const [items,setItems]=useState([]);
+  useEffect(()=>{
+    const f=t=>{ const id=uid(); setItems(l=>[...l,{...t,id}]); setTimeout(()=>setItems(l=>l.filter(x=>x.id!==id)),3800); };
+    toastSet.add(f); return ()=>toastSet.delete(f);
+  },[]);
+  return (
+    <div className="fixed bottom-5 inset-x-0 flex flex-col items-center gap-2 z-[100] px-4 pointer-events-none">
+      {items.map(t=>(
+        <div key={t.id} className={'fade-up flex items-center gap-2 rounded-xl px-4 py-3 text-sm border backdrop-blur shadow-lg '+
+          (t.type==='error'?'bg-rose-500/15 border-rose-400/40 text-rose-200':'bg-emerald-500/15 border-emerald-400/40 text-emerald-200')}>
+          <Ic n={t.type==='error'?'alert':'check'} c="w-4 h-4 shrink-0"/>{t.msg}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ═══════════ ۵) آیکون‌های SVG داخلی ═══════════ */
+const PATHS={
+  menu:'<line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="18" y2="18"/>',
+  x:'<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  bell:'<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
+  download:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/>',
+  upload:'<path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="M12 12v9"/><path d="m16 16-4-4-4 4"/>',
+  calendar:'<path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/>',
+  plus:'<path d="M5 12h14"/><path d="M12 5v14"/>',
+  trash:'<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+  check:'<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>',
+  alert:'<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+  pencil:'<path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>',
+  refresh:'<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
+  logout:'<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/>',
+  users:'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+  clipboard:'<rect width="8" height="4" x="8" y="2" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>',
+  credit:'<rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/>',
+  settings:'<line x1="4" x2="4" y1="21" y2="14"/><line x1="4" x2="4" y1="10" y2="3"/><line x1="12" x2="12" y1="21" y2="12"/><line x1="12" x2="12" y1="8" y2="3"/><line x1="20" x2="20" y1="21" y2="16"/><line x1="20" x2="20" y1="12" y2="3"/><line x1="2" x2="6" y1="14" y2="14"/><line x1="10" x2="14" y1="8" y2="8"/><line x1="18" x2="22" y1="16" y2="16"/>',
+  send:'<path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>',
+  chevL:'<path d="m15 18-6-6 6-6"/>',
+  chevR:'<path d="m9 18 6-6-6-6"/>',
+  clock:'<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+  image:'<rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>',
+  video:'<path d="m22 8-6 4 6 4V8Z"/><rect width="14" height="12" x="2" y="6" rx="2"/>',
+  layout:'<rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/>',
+  instagram:'<rect width="20" height="20" x="2" y="2" rx="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" x2="17.51" y1="6.5" y2="6.5"/>',
+  megaphone:'<path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>',
+  tag:'<path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/>',
+  sparkles:'<path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/>',
+  usercog:'<circle cx="18" cy="15" r="3"/><circle cx="9" cy="7" r="4"/><path d="M10 15H6a4 4 0 0 0-4 4v2"/><path d="m21.7 16.4-.9-.3"/><path d="m15.2 13.9-.9-.3"/><path d="m16.6 18.7.3-.9"/><path d="m19.1 12.2.3-.9"/><path d="m19.6 18.7-.4-1"/><path d="m16.8 12.3-.4-1"/><path d="m14.3 16.6 1-.4"/><path d="m20.7 13.8 1-.4"/>',
+  shieldcheck:'<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/>',
+  shieldx:'<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9.5 10.5 5 5"/><path d="m14.5 10.5-5 5"/>',
+  file:'<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/>'
+};
+function Ic({n,c}){ return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={c||'w-4 h-4'} dangerouslySetInnerHTML={{__html:PATHS[n]||''}}/>; }
+
+/* ═══════════ ۶) کامپوننت‌های UI ═══════════ */
+function Card({className,children}){ return <div className={'bg-navy-800/60 backdrop-blur border border-white/10 rounded-2xl '+(className||'')}>{children}</div>; }
+function Spinner({c}){ return <svg className={'animate-spin text-cyan-400 '+(c||'w-6 h-6')} viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg>; }
+function Button({variant,loading,className,children,as,...props}){
+  const v={primary:'bg-gradient-to-l from-violet-600 to-cyan-500 text-white shadow-glow hover:brightness-110',
+    ghost:'bg-white/5 hover:bg-white/10 text-slate-200 border border-white/10',
+    danger:'bg-rose-500/80 hover:bg-rose-500 text-white',
+    success:'bg-emerald-500/80 hover:bg-emerald-500 text-white',
+    outline:'border border-cyan-400/40 text-cyan-300 hover:bg-cyan-400/10'};
+  const Tag=as||'button';
+  return <Tag className={'inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[.98] '+v[variant||'primary']+' '+(className||'')} disabled={loading||(props&&props.disabled)} {...props}>{loading&&<Spinner c="w-4 h-4"/>}{children}</Tag>;
+}
+function Input({label,className,...p}){
+  return <label className="block space-y-1.5">{label&&<span className="text-xs text-slate-400">{label}</span>}
+    <input className={'w-full bg-navy-900/70 border border-white/10 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-cyan-400/60 placeholder:text-slate-500 '+(className||'')} {...p}/></label>;
+}
+function Select({label,className,children,...p}){
+  return <label className="block space-y-1.5">{label&&<span className="text-xs text-slate-400">{label}</span>}
+    <select className={'w-full bg-navy-900/70 border border-white/10 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-cyan-400/60 '+(className||'')} {...p}>{children}</select></label>;
+}
+function Ta({label,className,...p}){
+  return <label className="block space-y-1.5">{label&&<span className="text-xs text-slate-400">{label}</span>}
+    <textarea rows={3} className={'w-full bg-navy-900/70 border border-white/10 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-cyan-400/60 placeholder:text-slate-500 resize-y '+(className||'')} {...p}/></label>;
+}
+function Modal({open,onClose,title,children,wide}){
+  if(!open) return null;
+  return <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4">
+    <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose}></div>
+    <div className={'fade-up relative w-full bg-navy-800 border border-white/10 rounded-t-3xl sm:rounded-2xl p-5 space-y-4 '+(wide?'sm:max-w-2xl':'sm:max-w-md')}>
+      <div className="flex items-center justify-between"><h3 className="font-bold">{title}</h3>
+        <button onClick={onClose}><Ic n="x" c="w-5 h-5 text-slate-400"/></button></div>
+      {children}
+    </div></div>;
+}
+function Badge({s,map}){ const m=map||ORDER_STATUS; const x=m[s]||{label:s,cls:'bg-slate-500/15 text-slate-300 border-slate-400/30'};
+  return <span className={'inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-medium whitespace-nowrap '+x.cls}>{x.label}</span>; }
+function PageTitle({title,sub,children}){
+  return <div className="flex flex-wrap items-center justify-between gap-3 mb-6"><div>
+    <h1 className="text-xl font-bold">{title}</h1>{sub&&<p className="text-sm text-slate-400 mt-1">{sub}</p>}</div>{children}</div>;
+}
+function Empty({text}){ return <div className="text-center py-14 text-slate-500 text-sm">{text||'موردی یافت نشد'}</div>; }
+function Brand(){
+  return <div className="flex items-center gap-2.5">
+    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-600 to-cyan-400 flex items-center justify-center font-black text-white shadow-neon">آ</div>
+    <div><div className="font-extrabold tracking-tight leading-5">ادمین‌یار</div>
+    <div className="text-[10px] text-slate-400">مدیریت هوشمند پیج اینستاگرام</div></div></div>;
+}
+function AuthShell({title,sub,children}){
+  return <div className="min-h-screen flex items-center justify-center p-4 bg-[radial-gradient(ellipse_at_top_right,rgba(124,58,237,.18),transparent_60%),radial-gradient(ellipse_at_bottom_left,rgba(34,211,238,.12),transparent_55%)]">
+    <div className="fade-up w-full max-w-sm space-y-6"><Brand/>
+      <Card className="p-6 space-y-5"><div><h1 className="text-lg font-bold">{title}</h1><p className="text-sm text-slate-400 mt-1">{sub}</p></div>{children}</Card>
+    </div></div>;
+}
+
+/* ═══════════ ۷) احراز هویت ═══════════ */
+const AuthCtx=createContext(null);
+function AuthProvider({children}){
+  const [user,setUser]=useState(()=>{ try{return JSON.parse(localStorage.getItem('ay_user'));}catch(e){return null;} });
+  const [ready,setReady]=useState(!localStorage.getItem('ay_token'));
+  useEffect(()=>{ (async()=>{
+    if(!localStorage.getItem('ay_token')){ setReady(true); return; }
+    try{ setUser(await request('GET','/auth/me')); }catch(e){}
+    setReady(true);
+  })(); },[]);
+  const store=(t,u)=>{ localStorage.setItem('ay_token',t); localStorage.setItem('ay_user',JSON.stringify(u)); setUser(u); };
+  const value={
+    user,ready,
+    login:async(email,password)=>{ const r=await request('POST','/auth/login',{email,password}); store(r.token,r.user); return r.user; },
+    register:async(p)=>{ const r=await request('POST','/auth/register',p); store(r.token,r.user); return r.user; },
+    logout:()=>{ localStorage.removeItem('ay_token'); localStorage.removeItem('ay_user'); setUser(null); go('/login'); }
+  };
+  return <AuthCtx.Provider value={value}>{children}</AuthCtx.Provider>;
+}
+const useAuth=()=>useContext(AuthCtx);
+const homeFor=r=> r==='customer' ? '/dashboard' : '/admin';
+
+/* ═══════════ ۸) روتر Hash ═══════════ */
+function useRoute(){
+  const [h,setH]=useState(()=>location.hash.slice(1)||'/');
+  useEffect(()=>{ const f=()=>setH(location.hash.slice(1)||'/');
+    window.addEventListener('hashchange',f); return ()=>window.removeEventListener('hashchange',f); },[]);
+  const pq=h.split('?');
+  return { path:pq[0]||'/', query:new URLSearchParams(pq[1]||'') };
+}
+const go=p=>{ location.hash=p; };
+function Link({to,children,className,onClick,title}){ return <a href={'#'+to} className={className} onClick={onClick} title={title}>{children}</a>; }
+function Redirect({to}){ useEffect(()=>{ go(to); },[]); return null; }
+
+/* ═══════════ ۹) صفحات احراز هویت ═══════════ */
+function Login(){
+  const {user,login}=useAuth();
+  const [f,setF]=useState({email:'',password:''}); const [busy,setBusy]=useState(false);
+  if(user) return <Redirect to={homeFor(user.role)}/>;
+  const submit=async e=>{ e.preventDefault(); setBusy(true);
+    try{ const u=await login(f.email,f.password); toast('خوش آمدید، '+u.full_name); go(homeFor(u.role)); }
+    catch(err){ toast(err.message,'error'); } finally{ setBusy(false); } };
+  return <AuthShell title="ورود به ادمین‌یار" sub="پنل مدیریت پیج اینستاگرام شما">
+    <form onSubmit={submit} className="space-y-4">
+      <Input label="ایمیل" type="email" dir="ltr" required placeholder="you@example.com" value={f.email} onChange={e=>setF({...f,email:e.target.value})}/>
+      <Input label="رمز عبور" type="password" required value={f.password} onChange={e=>setF({...f,password:e.target.value})}/>
+      <Button className="w-full" loading={busy} type="submit">ورود</Button>
+      <p className="text-center text-sm text-slate-400">حساب ندارید؟ <Link to="/register" className="text-cyan-300 font-medium hover:underline">ثبت‌نام + ۳ روز رایگان</Link></p>
+    </form></AuthShell>;
+}
+function Register(){
+  const {user,register}=useAuth();
+  const [f,setF]=useState({fullName:'',email:'',password:'',confirm:''}); const [busy,setBusy]=useState(false);
+  if(user) return <Redirect to={homeFor(user.role)}/>;
+  const submit=async e=>{ e.preventDefault();
+    if(f.password!==f.confirm) return toast('تکرار رمز مطابقت ندارد','error');
+    setBusy(true);
+    try{ const u=await register({fullName:f.fullName,email:f.email,password:f.password});
+      toast('ثبت‌نام شد؛ اشتراک آزمایشی ۳ روزه فعال شد 🎉'); go(homeFor(u.role)); }
+    catch(err){ toast(err.message,'error'); } finally{ setBusy(false); } };
+  return <AuthShell title="ساخت حساب جدید" sub="با ثبت‌نام، ۳ روز اشتراک آزمایشی رایگان می‌گیرید">
+    <form onSubmit={submit} className="space-y-4">
+      <Input label="نام و نام خانوادگی" required value={f.fullName} onChange={e=>setF({...f,fullName:e.target.value})}/>
+      <Input label="ایمیل" type="email" dir="ltr" required value={f.email} onChange={e=>setF({...f,email:e.target.value})}/>
+      <Input label="رمز عبور (حداقل ۸ کاراکتر)" type="password" required value={f.password} onChange={e=>setF({...f,password:e.target.value})}/>
+      <Input label="تکرار رمز عبور" type="password" required value={f.confirm} onChange={e=>setF({...f,confirm:e.target.value})}/>
+      <Button className="w-full" loading={busy} type="submit">ثبت‌نام</Button>
+      <p className="text-center text-sm text-slate-400">قبلاً ثبت‌نام کرده‌اید؟ <Link to="/login" className="text-cyan-300 font-medium hover:underline">ورود</Link></p>
+    </form></AuthShell>;
+}
+
+/* ═══════════ ۱۰) اسکلت (سایدبار + هدر) ═══════════ */
+function useUnread(){
+  const [n,setN]=useState(0);
+  useEffect(()=>{ let t; const f=async()=>{ try{ const r=await api.get('/notifications'); setN(r.unread); }catch(e){} };
+    f(); t=setInterval(f,30000); return ()=>clearInterval(t); },[]);
+  return n;
+}
+const NAV={
+  customer:[
+    {to:'/dashboard',l:'داشبورد',i:'layout',end:true},{to:'/pages',l:'پیج‌های من',i:'instagram'},
+    {to:'/upload',l:'آپلود محتوا',i:'upload'},{to:'/orders/new',l:'ثبت سفارش',i:'plus'},
+    {to:'/orders',l:'سفارش‌های من',i:'clipboard'},{to:'/calendar',l:'تقویم محتوایی',i:'calendar'},
+    {to:'/subscription',l:'اشتراک',i:'credit'},{to:'/notifications',l:'اعلان‌ها',i:'bell'}],
+  super_admin:[
+    {to:'/admin',l:'داشبورد',i:'layout',end:true},{to:'/admin/orders',l:'سفارش‌ها',i:'clipboard'},
+    {to:'/admin/calendar',l:'تقویم انتشار',i:'calendar'},{to:'/admin/users',l:'کاربران',i:'users'},
+    {to:'/admin/payments',l:'پرداخت‌ها',i:'credit'},{to:'/admin/experts',l:'تیم و کارشناسان',i:'usercog'},
+    {to:'/admin/plans',l:'پلن‌ها و قیمت‌ها',i:'tag'},{to:'/admin/settings',l:'تنظیمات',i:'settings'},
+    {to:'/admin/notify',l:'ارسال اعلان',i:'megaphone'}],
+  content_admin:[
+    {to:'/admin',l:'داشبورد',i:'layout',end:true},{to:'/admin/orders',l:'سفارش‌ها',i:'clipboard'},
+    {to:'/admin/calendar',l:'تقویم انتشار',i:'calendar'},{to:'/admin/notify',l:'ارسال اعلان',i:'megaphone'}],
+  support:[
+    {to:'/admin',l:'داشبورد',i:'layout',end:true},{to:'/admin/orders',l:'سفارش‌ها (مشاهده)',i:'clipboard'},
+    {to:'/admin/users',l:'کاربران',i:'users'}],
+  editor:[{to:'/admin/orders',l:'سفارش‌های من',i:'clipboard'}],
+  designer:[{to:'/admin/orders',l:'سفارش‌های من',i:'clipboard'}]
+};
+function Shell({children}){
+  const {path}=useRoute();
+  const {user,logout}=useAuth();
+  const [open,setOpen]=useState(false);
+  const unread=useUnread();
+  const items=NAV[user.role]||[];
+  const notifTo=user.role==='customer'?'/notifications':'/admin/notifications';
+  return (
+    <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,rgba(124,58,237,.10),transparent_55%)]">
+      <aside className={'fixed inset-y-0 right-0 z-40 w-72 bg-navy-900/95 backdrop-blur border-l border-white/10 p-5 transition-transform duration-300 lg:translate-x-0 '+(open?'translate-x-0':'translate-x-full')}>
+        <Brand/>
+        <nav className="mt-8 space-y-1">
+          {items.map(it=>{
+            const active=it.end? path===it.to : (path===it.to||path.startsWith(it.to+'/'));
+            return <Link key={it.to} to={it.to} onClick={()=>setOpen(false)}
+              className={'flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm transition '+(active?'bg-gradient-to-l from-violet-600/30 to-cyan-500/20 text-white border border-cyan-400/20 shadow-neon':'text-slate-400 hover:text-white hover:bg-white/5')}>
+              <Ic n={it.i}/>{it.l}</Link>;
+          })}
+        </nav>
+        <div className="absolute bottom-5 right-5 left-5 border-t border-white/10 pt-4 flex items-center justify-between">
+          <div className="min-w-0"><div className="text-sm font-medium truncate">{user.full_name}</div>
+            <div className="text-[11px] text-slate-400">{ROLE_LABELS[user.role]}</div></div>
+          <button onClick={logout} title="خروج" className="p-2 rounded-lg hover:bg-rose-500/15 text-slate-400 hover:text-rose-300 transition"><Ic n="logout"/></button>
+        </div>
+      </aside>
+      {open&&<div className="fixed inset-0 bg-black/60 z-30 lg:hidden" onClick={()=>setOpen(false)}></div>}
+      <div className="lg:mr-72">
+        <header className="sticky top-0 z-20 backdrop-blur bg-navy-950/70 border-b border-white/5 px-4 py-3 flex items-center justify-between">
+          <button className="lg:hidden p-2 -mr-2" onClick={()=>setOpen(true)}><Ic n="menu" c="w-5 h-5"/></button>
+          <div className="lg:hidden scale-90 origin-right"><Brand/></div>
+          <Link to={notifTo} className="lg:ml-auto relative block p-2 rounded-lg hover:bg-white/5 transition">
+            <Ic n="bell" c="w-5 h-5 text-slate-300"/>
+            {unread>0&&<span className="absolute -top-0.5 -left-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-cyan-400 text-navy-950 text-[10px] font-bold flex items-center justify-center">{faNum(unread)}</span>}
+          </Link>
+        </header>
+        <main className="fade-up p-4 md:p-6 max-w-6xl mx-auto">{children}</main>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════ ۱۱) داشبورد مشتری ═══════════ */
+function Dashboard(){
+  const [d,setD]=useState(null);
+  useEffect(()=>{ (async()=>{ try{
+    const [orders,pages,sub,cal]=await Promise.all([
+      api.get('/orders'),api.get('/pages'),api.get('/subscriptions/me'),
+      api.get('/calendar?from='+encodeURIComponent(new Date().toISOString())+'&to='+encodeURIComponent(new Date(Date.now()+14*86400000).toISOString()))]);
+    setD({orders,pages,sub,upcoming:cal});
+  }catch(e){} })(); },[]);
+  if(!d) return <div className="flex justify-center py-20"><Spinner/></div>;
+  const active=d.orders.filter(o=>!['completed','canceled','rejected'].includes(o.status)).length;
+  const waiting=d.orders.filter(o=>o.status==='delivered').length;
+  const cur=d.sub.current;
+  const isActive=cur&&cur.status==='active';
+  const daysLeft=isActive?Math.max(0,Math.ceil((new Date(cur.expires_at)-Date.now())/86400000)):0;
+  const stats=[
+    {l:'پیج‌های من',v:d.pages.length,i:'instagram',to:'/pages'},
+    {l:'سفارش‌های فعال',v:active,i:'clipboard',to:'/orders'},
+    {l:'در انتظار تأیید شما',v:waiting,i:'check',to:'/orders'},
+    {l:'انتشارهای ۱۴ روز آینده',v:d.upcoming.length,i:'calendar',to:'/calendar'}];
+  return (<div>
+    <PageTitle title="داشبورد" sub="نمای کلی فعالیت پیج‌های شما"/>
+    {!isActive&&<Card className="p-5 mb-6 border-amber-400/30 bg-amber-500/5 flex flex-wrap items-center justify-between gap-3">
+      <div className="flex items-center gap-3"><Ic n="credit" c="w-6 h-6 text-amber-300"/>
+        <div><div className="font-medium text-amber-200">اشتراک فعالی ندارید</div>
+        <div className="text-xs text-amber-300/70">برای آپلود و ثبت سفارش، اشتراک بخرید یا تمدید کنید</div></div></div>
+      <Button variant="outline" as="a" href="#/subscription">خرید / تمدید اشتراک</Button>
+    </Card>}
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+      {stats.map(s=><Link key={s.l} to={s.to}><Card className="p-4 hover:border-cyan-400/30 transition group">
+        <div className="flex items-center justify-between"><div className="text-[11px] text-slate-400">{s.l}</div><Ic n={s.i} c="w-4 h-4 text-cyan-400"/></div>
+        <div className="text-2xl font-extrabold mt-2 bg-gradient-to-l from-cyan-300 to-violet-300 bg-clip-text text-transparent">{faNum(s.v)}</div>
+      </Card></Link>)}
+    </div>
+    {isActive&&<Card className="p-5 mb-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="font-medium">{cur.plan_title}</div>
+        <div className="text-xs text-slate-400">{faNum(daysLeft)} روز باقی‌مانده · پایان: {jDate(cur.expires_at)}</div></div>
+      <div className="h-1.5 bg-white/10 rounded-full overflow-hidden mt-3">
+        <div className="h-full bg-gradient-to-l from-violet-500 to-cyan-400" style={{width:Math.min(100,(daysLeft/cur.duration_days)*100)+'%'}}></div></div>
+    </Card>}
+    <div className="grid lg:grid-cols-2 gap-4">
+      <Card className="p-5">
+        <div className="flex items-center justify-between mb-3"><h2 className="font-bold">آخرین سفارش‌ها</h2><Link to="/orders" className="text-xs text-cyan-300 hover:underline">همه</Link></div>
+        <div className="space-y-2">
+          {d.orders.slice(0,5).map(o=><Link key={o.id} to={'/orders/'+o.id} className="flex items-center justify-between p-2.5 rounded-xl hover:bg-white/5 transition">
+            <div className="min-w-0"><div className="text-sm truncate">{o.title}</div>
+            <div className="text-[11px] text-slate-400">{ORDER_TYPES[o.type]||o.type} · {jDate(o.created_at)}</div></div><Badge s={o.status}/></Link>)}
+          {!d.orders.length&&<div className="text-xs text-slate-500 py-4 text-center">هنوز سفارشی ثبت نکرده‌اید</div>}
+        </div>
+      </Card>
+      <Card className="p-5">
+        <div className="flex items-center justify-between mb-3"><h2 className="font-bold">انتشارهای پیش‌رو</h2><Link to="/calendar" className="text-xs text-cyan-300 hover:underline">تقویم</Link></div>
+        <div className="space-y-2">
+          {d.upcoming.slice(0,5).map(p=><div key={p.id} className="flex items-center justify-between p-2.5 rounded-xl bg-white/[.03]">
+            <div className="flex items-center gap-2.5 min-w-0"><span className={'w-2 h-2 rounded-full shrink-0 '+(SCHED_STATUS[p.status]?SCHED_STATUS[p.status].dot:'bg-sky-400')}></span>
+              <div className="min-w-0"><div className="text-sm truncate">{p.order_title||p.type}</div>
+              <div className="text-[11px] text-slate-400">@{p.page_username}</div></div></div>
+            <div className="text-xs text-slate-300 shrink-0">{jDate(p.publish_at)} · {jTime(p.publish_at)}</div></div>)}
+          {!d.upcoming.length&&<div className="text-xs text-slate-500 py-4 text-center">انتشار زمان‌بندی‌شده‌ای ندارید</div>}
+        </div>
+        <Link to="/orders/new"><Button variant="outline" className="w-full mt-4">+ ثبت سفارش جدید</Button></Link>
+      </Card>
+    </div>
+  </div>);
+}
+
+/* ═══════════ ۱۲) پیج‌ها ═══════════ */
+function Pages(){
+  const [rows,setRows]=useState(null); const [open,setOpen]=useState(false); const [busy,setBusy]=useState(false);
+  const [f,setF]=useState({username:'',title:'',category:'سایر'});
+  const load=()=>api.get('/pages').then(setRows).catch(()=>setRows([]));
+  useEffect(()=>{ load(); },[]);
+  const add=async e=>{ e.preventDefault(); setBusy(true);
+    try{ await api.post('/pages',f); toast('پیج ثبت شد'); setOpen(false); setF({username:'',title:'',category:'سایر'}); load(); }
+    catch(err){ toast(err.message,'error'); } finally{ setBusy(false); } };
+  const del=async id=>{ if(!confirm('پیج حذف شود؟')) return;
+    try{ await api.del('/pages/'+id); toast('حذف شد'); load(); }catch(err){ toast(err.message,'error'); } };
+  if(rows===null) return <div className="flex justify-center py-20"><Spinner/></div>;
+  return (<div>
+    <PageTitle title="پیج‌های اینستاگرام" sub="پیج‌هایی که تیم ادمین‌یار مدیریت می‌کند">
+      <Button onClick={()=>setOpen(true)}><Ic n="plus"/>افزودن پیج</Button></PageTitle>
+    {rows.length?<div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      {rows.map(p=><Card key={p.id} className="p-5 hover:border-cyan-400/25 transition">
+        <div className="flex items-start justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-violet-600/40 to-cyan-400/30 flex items-center justify-center"><Ic n="instagram" c="w-5 h-5 text-cyan-300"/></div>
+            <div><div className="font-medium">{p.title}</div><div className="text-xs text-slate-400" dir="ltr">@{p.username}</div></div></div>
+          <button onClick={()=>del(p.id)} className="p-2 rounded-lg text-slate-500 hover:text-rose-300 hover:bg-rose-500/10 transition"><Ic n="trash"/></button>
+        </div>
+        <div className="flex items-center justify-between mt-4 text-xs text-slate-400">
+          <span>{p.category}</span><span className="flex items-center gap-1"><Ic n="clipboard" c="w-3.5 h-3.5"/>{faNum(p.orders_count)} سفارش</span></div>
+      </Card>)}
+    </div>:<Card><Empty text="هنوز پیژی ثبت نکرده‌اید؛ اولین پیج را اضافه کنید"/></Card>}
+    <Modal open={open} onClose={()=>setOpen(false)} title="افزودن پیج اینستاگرام">
+      <form onSubmit={add} className="space-y-4">
+        <Input label="نام کاربری اینستاگرام" dir="ltr" required placeholder="your_page" value={f.username} onChange={e=>setF({...f,username:e.target.value})}/>
+        <Input label="نام نمایشی" placeholder="مثلاً: کافه ستاره" value={f.title} onChange={e=>setF({...f,title:e.target.value})}/>
+        <Select label="دسته‌بندی" value={f.category} onChange={e=>setF({...f,category:e.target.value})}>
+          {['فروشگاه','خدمات','شخصی','تولید محتوا','آموزش','سایر'].map(c=><option key={c}>{c}</option>)}</Select>
+        <Button className="w-full" loading={busy} type="submit">ثبت پیج</Button>
+      </form></Modal>
+  </div>);
+}
+
+/* ═══════════ ۱۳) آپلود چندفایلی با درصد پیشرفت ═══════════ */
+function Upload(){
+  const inputRef=useRef(null);
+  const [pages,setPages]=useState([]); const [pageId,setPageId]=useState('');
+  const [limitMb,setLimitMb]=useState(100); const [kind,setKind]=useState('story');
+  const [items,setItems]=useState([]); const [drag,setDrag]=useState(false); const [busy,setBusy]=useState(false);
+  useEffect(()=>{
+    api.get('/pages').then(r=>{ setPages(r); if(r[0]) setPageId(r[0].id); }).catch(()=>{});
+    api.get('/subscriptions/me').then(r=>setLimitMb((r.current&&r.current.max_file_size_mb)||100)).catch(()=>{});
+  },[]);
+  const upd=(id,patch)=>setItems(l=>l.map(x=>x.id===id?{...x,...patch}:x));
+  const addFiles=list=>{
+    const ok=[...list].filter(fl=>{ if(fl.size>limitMb*1048576){ toast('«'+fl.name+'» بزرگ‌تر از سقف '+faNum(limitMb)+' مگابایت است','error'); return false; } return true; });
+    if(ok.length) setItems(prev=>[...prev,...ok.map(fl=>({id:uid(),file:fl,desc:'',progress:0,status:'ready'}))]);
+  };
+  const start=async()=>{
+    if(!pageId) return toast('ابتدا پیج مقصد را انتخاب کنید','error');
+    const queue=items.filter(x=>x.status==='ready');
+    if(!queue.length) return toast('فایلی برای آپلود انتخاب نشده','error');
+    setBusy(true);
+    const worker=async()=>{
+      while(queue.length){
+        const it=queue.shift(); upd(it.id,{status:'uploading',progress:0});
+        try{
+          const fd=new FormData();
+          fd.append('file',it.file); fd.append('kind',kind); fd.append('pageId',pageId); fd.append('description',it.desc||'');
+          await uploadXHR(fd,p=>upd(it.id,{progress:p}));
+          upd(it.id,{status:'done',progress:100});
+        }catch(err){ upd(it.id,{status:'error',msg:err.message}); }
+      }
+    };
+    await Promise.all([worker(),worker(),worker()]);
+    setBusy(false); toast('فرآیند آپلود تمام شد');
+  };
+  const accept= kind==='reel'||kind==='raw_video' ? 'video/*' : kind==='post' ? 'image/*' : 'image/*,video/*';
+  const readyCount=items.filter(x=>x.status==='ready').length;
+  return (<div>
+    <PageTitle title="آپلود محتوا" sub={'حداکثر حجم هر فایل: '+faNum(limitMb)+' مگابایت — چند فایل هم‌زمان'}/>
+    <div className="grid md:grid-cols-2 gap-4 mb-5">
+      <Select label="پیج مقصد" value={pageId} onChange={e=>setPageId(e.target.value)}>
+        {pages.map(p=><option key={p.id} value={p.id}>@{p.username} — {p.title}</option>)}</Select>
+      <Select label="نوع محتوا" value={kind} onChange={e=>setKind(e.target.value)}>
+        {['story','post','reel','raw_video'].map(k=><option key={k} value={k}>{FILE_KINDS[k]}</option>)}</Select>
+    </div>
+    <div onClick={()=>inputRef.current&&inputRef.current.click()}
+      onDragOver={e=>{e.preventDefault();setDrag(true);}} onDragLeave={()=>setDrag(false)}
+      onDrop={e=>{e.preventDefault();setDrag(false);addFiles(e.dataTransfer.files);}}
+      className={'border-2 border-dashed rounded-2xl p-10 text-center cursor-pointer transition mb-5 '+(drag?'border-cyan-400 bg-cyan-400/10':'border-white/15 hover:border-cyan-400/50 hover:bg-white/[.03]')}>
+      <Ic n="upload" c="w-10 h-10 mx-auto text-cyan-400"/>
+      <div className="mt-3 text-sm font-medium">فایل‌ها را اینجا رها کنید یا کلیک کنید</div>
+      <div className="text-xs text-slate-400 mt-1">{FILE_KINDS[kind]} — انتخاب چندگانه پشتیبانی می‌شود</div>
+      <input ref={inputRef} type="file" multiple accept={accept} className="hidden" onChange={e=>{addFiles(e.target.files); e.target.value='';}}/>
+    </div>
+    <div className="space-y-3">
+      {items.map(it=><Card key={it.id} className="p-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <Ic n={it.file.type.indexOf('video')===0?'video':'image'} c="w-8 h-8 text-cyan-300"/>
+          <div className="flex-1 min-w-[200px]">
+            <div className="text-sm truncate">{it.file.name}</div>
+            <div className="text-xs text-slate-400">{fmtSize(it.file.size)} · {FILE_KINDS[kind]}</div>
+            {it.status==='ready'&&<Input className="mt-2" placeholder="توضیح این فایل (اختیاری)" value={it.desc} onChange={e=>upd(it.id,{desc:e.target.value})}/>}
+          </div>
+          <div className="w-full sm:w-44">
+            {it.status==='done'?<span className="text-emerald-300 text-sm flex items-center gap-1.5"><Ic n="check" c="w-4 h-4"/>آپلود شد</span>
+            :it.status==='error'?<span className="text-rose-300 text-xs">{it.msg}</span>
+            :<React.Fragment>
+              <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
+                <div className="h-full bg-gradient-to-l from-violet-500 to-cyan-400 transition-all" style={{width:it.progress+'%'}}></div></div>
+              <div className="text-[11px] text-slate-400 mt-1">{it.status==='uploading'?'در حال آپلود '+faNum(it.progress)+'٪':'آماده آپلود'}</div>
+            </React.Fragment>}
+          </div>
+        </div></Card>)}
+    </div>
+    <div className="mt-5 flex flex-wrap gap-3">
+      <Button onClick={start} loading={busy} disabled={!readyCount}><Ic n="upload"/>شروع آپلود ({faNum(readyCount)} فایل)</Button>
+      {items.some(x=>x.status==='done')&&<Link to="/orders/new"><Button variant="outline">ثبت سفارش با این فایل‌ها</Button></Link>}
+    </div>
+  </div>);
+}
+
+/* ═══════════ ۱۴) ثبت سفارش ═══════════ */
+function NewOrder(){
+  const [pages,setPages]=useState([]); const [files,setFiles]=useState([]);
+  const [sel,setSel]=useState({}); const [busy,setBusy]=useState(false);
+  const [f,setF]=useState({pageId:'',type:'edit_video',title:'',description:''});
+  useEffect(()=>{
+    api.get('/pages').then(r=>{ setPages(r); if(r[0]) setF(p=>({...p,pageId:r[0].id})); }).catch(()=>{});
+    api.get('/uploads?kinds=story,post,reel,raw_video').then(setFiles).catch(()=>{});
+  },[]);
+  const toggle=id=>setSel(s=>{ const n={...s}; n[id]=!n[id]; return n; });
+  const selected=Object.keys(sel).filter(k=>sel[k]);
+  const submit=async e=>{ e.preventDefault();
+    if(!selected.length) return toast('حداقل یک فایل انتخاب کنید','error');
+    setBusy(true);
+    try{ const r=await api.post('/orders',{...f,fileIds:selected});
+      toast('سفارش ثبت شد و به تیم رسید ✅'); go('/orders/'+r.id); }
+    catch(err){ toast(err.message,'error'); } finally{ setBusy(false); } };
+  return (<div>
+    <PageTitle title="ثبت سفارش جدید" sub="فایل‌های آپلودشده را انتخاب و درخواست خود را ثبت کنید"/>
+    {!pages.length&&<Card className="p-5 mb-5 border-amber-400/30 text-amber-200 text-sm">ابتدا در «پیج‌های من» یک پیج ثبت کنید.</Card>}
+    <form onSubmit={submit} className="space-y-5">
+      <div className="grid md:grid-cols-2 gap-4">
+        <Select label="پیج" required value={f.pageId} onChange={e=>setF({...f,pageId:e.target.value})}>
+          {pages.map(p=><option key={p.id} value={p.id}>@{p.username}</option>)}</Select>
+        <Select label="نوع سفارش" value={f.type} onChange={e=>setF({...f,type:e.target.value})}>
+          {Object.keys(ORDER_TYPES).map(k=><option key={k} value={k}>{ORDER_TYPES[k]}</option>)}</Select>
+      </div>
+      <Input label="عنوان سفارش" required placeholder="مثلاً: تدوین ریلز معرفی محصول جدید" value={f.title} onChange={e=>setF({...f,title:e.target.value})}/>
+      <Ta label="توضیحات (سبک تدوین، موسیقی، متن کپشن و...)" value={f.description} onChange={e=>setF({...f,description:e.target.value})}/>
+      <div>
+        <div className="text-xs text-slate-400 mb-2">فایل‌های شما ({faNum(files.length)} — برای انتخاب کلیک کنید)</div>
+        {files.length?<div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {files.map(fl=>{
+            const on=!!sel[fl.id];
+            return <button type="button" key={fl.id} onClick={()=>toggle(fl.id)}
+              className={'text-right rounded-xl border p-3 transition flex items-center gap-3 '+(on?'border-cyan-400/60 bg-cyan-400/10 shadow-neon':'border-white/10 bg-navy-800/60 hover:border-white/25')}>
+              <Ic n={fl.mime.indexOf('video')===0?'video':'image'} c={'w-6 h-6 shrink-0 '+(on?'text-cyan-300':'text-slate-400')}/>
+              <div className="min-w-0"><div className="text-xs truncate">{fl.original_name}</div>
+              <div className="text-[10px] text-slate-400">{FILE_KINDS[fl.kind]} · {fmtSize(fl.size)}</div></div>
+            </button>; })}
+        </div>:<Card className="p-5 text-sm text-slate-400">فایلی آپلود نکرده‌اید. به <Link to="/upload" className="text-cyan-300 underline">صفحه آپلود</Link> بروید.</Card>}
+      </div>
+      <Button type="submit" loading={busy} className="min-w-44">ثبت سفارش</Button>
+    </form>
+  </div>);
+}
+
+/* ═══════════ ۱۵) لیست سفارش‌های مشتری ═══════════ */
+function Orders(){
+  const [rows,setRows]=useState(null);
+  useEffect(()=>{ api.get('/orders').then(setRows).catch(()=>setRows([])); },[]);
+  if(rows===null) return <div className="flex justify-center py-20"><Spinner/></div>;
+  return (<div>
+    <PageTitle title="سفارش‌های من" sub="پیگیری وضعیت تمام سفارش‌ها">
+      <Button onClick={()=>go('/orders/new')}><Ic n="plus"/>سفارش جدید</Button></PageTitle>
+    {rows.length?<div className="space-y-3">
+      {rows.map(o=><Link key={o.id} to={'/orders/'+o.id}><Card className="p-4 hover:border-cyan-400/30 transition group">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="font-medium group-hover:text-cyan-300 transition truncate">{o.title}</div>
+            <div className="text-xs text-slate-400 mt-0.5">{ORDER_TYPES[o.type]||o.type}{o.page_username?' · @'+o.page_username:''} · {jDate(o.created_at)}</div></div>
+          <div className="flex items-center gap-3"><Badge s={o.status}/><Ic n="chevL" c="w-4 h-4 text-slate-500"/></div>
+        </div></Card></Link>)}
+    </div>:<Card><Empty text="سفارشی ثبت نکرده‌اید"/></Card>}
+  </div>);
+}
+
+/* ═══════════ ۱۶) جزئیات سفارش (مشتری/ادمین/کارشناس) ═══════════ */
+function OrderDetail({id,admin}){
+  const {user}=useAuth();
+  const [o,setO]=useState(null); const [experts,setExperts]=useState([]);
+  const [modal,setModal]=useState(null); const [form,setForm]=useState({});
+  const load=()=>api.get('/orders/'+id).then(setO).catch(e=>toast(e.message,'error'));
+  useEffect(()=>{ load();
+    if(user&&['super_admin','content_admin'].includes(user.role))
+      api.get('/admin/experts').then(r=>setExperts(r.filter(x=>['editor','designer'].includes(x.role)))).catch(()=>{});
+  },[]);
+  if(!o) return <div className="flex justify-center py-24"><Spinner/></div>;
+  const isOwner=o.user_id===user.id;
+  const isExpert=['editor','designer'].includes(user.role)&&o.assigned_to===user.id;
+  const isBoss=['super_admin','content_admin'].includes(user.role);
+  const act=async(fn,msg)=>{ try{ await fn(); toast(msg); load(); }catch(e){ toast(e.message,'error'); } };
+  const submitModal=async()=>{
+    if(modal==='assign') await act(()=>api.post('/admin/orders/'+o.id+'/assign',{expertId:form.expertId}),'به کارشناس اختصاص یافت');
+    if(modal==='reject') await act(()=>api.post('/admin/orders/'+o.id+'/reject',{note:form.note}),'سفارش رد شد');
+    if(modal==='revision') await act(()=>api.post('/orders/'+o.id+'/revision',{note:form.note}),'درخواست اصلاح ارسال شد');
+    if(modal==='schedule') await act(()=>api.post('/orders/'+o.id+'/schedule',{publishAt:form.publishAt,caption:form.caption}),'زمان‌بندی ثبت شد');
+    setModal(null);
+  };
+  const onDeliver=async e=>{
+    const fl=e.target.files&&e.target.files[0]; if(!fl) return;
+    try{
+      const fd=new FormData(); fd.append('file',fl); fd.append('kind','deliverable'); fd.append('orderId',o.id); fd.append('description','خروجی نهایی');
+      const r=await uploadXHR(fd);
+      await api.post('/orders/'+o.id+'/status',{status:'delivered',deliverableFileId:r.id});
+      toast('خروجی برای مشتری ارسال شد'); load();
+    }catch(err){ toast(err.message,'error'); }
+  };
+  const logLabel=l=>({create:'ثبت سفارش',assign:'تخصیص کارشناس',reject:'رد سفارش',completed:'تکمیل سفارش'}[l.action]||(ORDER_STATUS[l.action]&&ORDER_STATUS[l.action].label)||l.action);
+  return (<div>
+    <PageTitle title={o.title} sub={(ORDER_TYPES[o.type]||o.type)+(o.page_username?' · @'+o.page_username:'')+' · '+jDate(o.created_at)}>
+      <Badge s={o.status}/></PageTitle>
+    {(isBoss||isOwner||isExpert)&&<div className="flex flex-wrap gap-2 mb-5">
+      {isBoss&&['pending','assigned'].includes(o.status)&&<Button variant="outline" onClick={()=>{setForm({expertId:experts[0]?experts[0].id:''});setModal('assign');}}><Ic n="usercog"/>تخصیص به کارشناس</Button>}
+      {isBoss&&o.status==='pending'&&<Button variant="danger" onClick={()=>{setForm({note:''});setModal('reject');}}><Ic n="shieldx"/>رد سفارش</Button>}
+      {isOwner&&o.status==='pending'&&<Button variant="ghost" onClick={()=>act(()=>api.post('/orders/'+o.id+'/cancel'),'سفارش لغو شد')}>لغو سفارش</Button>}
+      {isOwner&&o.status==='delivered'&&<React.Fragment>
+        <Button variant="success" onClick={()=>act(()=>api.post('/orders/'+o.id+'/approve'),'محتوا تأیید شد')}><Ic n="check"/>تأیید محتوا</Button>
+        <Button variant="outline" onClick={()=>{setForm({note:''});setModal('revision');}}><Ic n="refresh"/>درخواست اصلاح</Button>
+      </React.Fragment>}
+      {isOwner&&['approved','scheduled'].includes(o.status)&&<Button onClick={()=>{setForm({publishAt:toLocalInput(new Date(Date.now()+3600000)),caption:(o.post&&o.post.caption)||''});setModal('schedule');}}>
+        <Ic n="calendar"/>{o.status==='scheduled'?'ویرایش زمان‌بندی':'زمان‌بندی انتشار'}</Button>}
+      {(isExpert||isBoss)&&o.status==='assigned'&&<Button onClick={()=>act(()=>api.post('/orders/'+o.id+'/status',{status:'in_progress'}),'شروع انجام ثبت شد')}>شروع انجام</Button>}
+      {(isExpert||isBoss)&&['in_progress','revision_requested'].includes(o.status)&&
+        <label className="cursor-pointer"><input type="file" className="hidden" onChange={onDeliver} accept="video/*,image/*"/>
+        <Button as="span" variant="success"><Ic n="download"/>ارسال خروجی به مشتری</Button></label>}
+      {isBoss&&o.post&&['scheduled','manual_ready'].includes(o.post.status)&&<React.Fragment>
+        <Button variant="ghost" onClick={()=>act(()=>api.post('/calendar/'+o.post.id+'/manual-ready'),'اعلام انتشار دستی ارسال شد')}><Ic n="megaphone"/>اعلام انتشار دستی</Button>
+        <Button variant="success" onClick={()=>act(()=>api.post('/calendar/'+o.post.id+'/publish'),'انتشار ثبت و سفارش تکمیل شد')}><Ic n="send"/>ثبت انجام انتشار</Button>
+      </React.Fragment>}
+    </div>}
+    <div className="grid lg:grid-cols-2 gap-4">
+      <div className="space-y-4">
+        <Card className="p-5 space-y-3">
+          <h2 className="font-bold">اطلاعات سفارش</h2>
+          {admin&&<div className="text-sm text-slate-300">مشتری: <span className="text-cyan-300">{o.customer_name}</span> <span className="text-xs text-slate-500" dir="ltr">{o.customer_email}</span></div>}
+          <div className="text-sm text-slate-300">کارشناس: {o.expert_name||<span className="text-slate-500">—</span>}</div>
+          {o.description&&<div className="text-sm bg-white/5 rounded-xl p-3 leading-6">{o.description}</div>}
+          {o.revision_note&&o.status==='revision_requested'&&<div className="text-sm bg-orange-500/10 border border-orange-400/30 text-orange-200 rounded-xl p-3">درخواست اصلاح: {o.revision_note}</div>}
+        </Card>
+        <Card className="p-5 space-y-3">
+          <h2 className="font-bold">فایل‌های سفارش</h2>
+          {o.files.map(fl=><div key={fl.id} className="flex items-center justify-between gap-3 bg-white/[.03] rounded-xl p-3">
+            <div className="min-w-0"><div className="text-sm truncate">{fl.original_name}</div>
+            <div className="text-[11px] text-slate-400">{FILE_KINDS[fl.kind]}{fl.description?' · '+fl.description:''}</div></div>
+            <Button variant="ghost" className="!px-3 !py-1.5 shrink-0" onClick={()=>downloadFile(fl.id,fl.original_name).catch(e=>toast(e.message,'error'))}><Ic n="download"/>دریافت</Button>
+          </div>)}
+          {o.deliverable_file_id&&<div className="flex items-center justify-between gap-3 bg-emerald-500/10 border border-emerald-400/30 rounded-xl p-3">
+            <div className="text-sm truncate text-emerald-200 min-w-0">🎬 خروجی نهایی: {o.deliverable_name}</div>
+            <Button variant="success" className="!px-3 !py-1.5 shrink-0" onClick={()=>downloadFile(o.deliverable_file_id,o.deliverable_name).catch(e=>toast(e.message,'error'))}><Ic n="download"/>دانلود</Button>
+          </div>}
+        </Card>
+        {o.post&&<Card className="p-5 space-y-2">
+          <h2 className="font-bold">اطلاعات انتشار</h2>
+          <div className="text-sm text-slate-300">زمان: {jDate(o.post.publish_at)} — {jTime(o.post.publish_at)}</div>
+          {o.post.caption&&<div className="text-sm bg-white/5 rounded-xl p-3 whitespace-pre-wrap">{o.post.caption}</div>}
+          <Badge s={o.post.status} map={SCHED_STATUS}/>
+        </Card>}
+      </div>
+      <Card className="p-5">
+        <h2 className="font-bold mb-4">تاریخچه سفارش</h2>
+        {o.logs.map((l,i)=><div key={i} className="flex gap-3">
+          <div className="flex flex-col items-center">
+            <div className="w-2.5 h-2.5 rounded-full bg-cyan-400 shadow-neon mt-1.5"></div>
+            {i<o.logs.length-1&&<div className="flex-1 w-px bg-white/10"></div>}
+          </div>
+          <div className="pb-5">
+            <div className="text-sm">{logLabel(l)}</div>
+            <div className="text-[11px] text-slate-400">{l.actor_name||'سیستم'} · {jDate(l.created_at)} {jTime(l.created_at)}</div>
+            {l.note&&<div className="text-xs bg-white/5 rounded-lg px-2.5 py-1.5 mt-1.5 inline-block text-slate-300">{l.note}</div>}
+          </div></div>)}
+      </Card>
+    </div>
+    <Modal open={modal==='assign'} onClose={()=>setModal(null)} title="تخصیص به کارشناس">
+      <div className="space-y-4">
+        <Select label="کارشناس" value={form.expertId||''} onChange={e=>setForm({...form,expertId:e.target.value})}>
+          {experts.map(x=><option key={x.id} value={x.id}>{x.full_name} — {x.role==='editor'?'تدوینگر':'طراح'}</option>)}</Select>
+        <Button className="w-full" onClick={submitModal}>ثبت تخصیص</Button></div></Modal>
+    <Modal open={modal==='reject'} onClose={()=>setModal(null)} title="رد سفارش">
+      <div className="space-y-4"><Ta label="دلیل رد (برای مشتری ارسال می‌شود)" value={form.note||''} onChange={e=>setForm({...form,note:e.target.value})}/>
+      <Button variant="danger" className="w-full" onClick={submitModal}>رد سفارش</Button></div></Modal>
+    <Modal open={modal==='revision'} onClose={()=>setModal(null)} title="درخواست اصلاح">
+      <div className="space-y-4"><Ta label="چه چیزی را اصلاح دهیم؟" value={form.note||''} onChange={e=>setForm({...form,note:e.target.value})}/>
+      <Button className="w-full" onClick={submitModal}>ارسال درخواست</Button></div></Modal>
+    <Modal open={modal==='schedule'} onClose={()=>setModal(null)} title="زمان‌بندی انتشار">
+      <div className="space-y-4">
+        <Input label="تاریخ و ساعت انتشار" type="datetime-local" value={form.publishAt||''} onChange={e=>setForm({...form,publishAt:e.target.value})}/>
+        <Ta label="کپشن پیشنهادی (اختیاری)" value={form.caption||''} onChange={e=>setForm({...form,caption:e.target.value})}/>
+        <Button className="w-full" onClick={submitModal}>ثبت زمان‌بندی</Button></div></Modal>
+  </div>);
+}
+
+/* ═══════════ ۱۷) تقویم شمسی ═══════════ */
+function CalendarPage({admin}){
+  const {user}=useAuth();
+  const now=Jal.toJal(new Date().getFullYear(),new Date().getMonth()+1,new Date().getDate());
+  const [ym,setYm]=useState({jy:now.jy,jm:now.jm});
+  const [posts,setPosts]=useState(null);
+  const [selKey,setSelKey]=useState(dayKey(new Date()));
+  const [edit,setEdit]=useState(null);
+  const grid=useMemo(()=>monthGrid(ym.jy,ym.jm),[ym]);
+  const load=()=>{
+    const from=grid[0].date.toISOString(), to=grid[41].date.toISOString();
+    api.get('/calendar?from='+encodeURIComponent(from)+'&to='+encodeURIComponent(to)+(admin?'&all=1':''))
+      .then(setPosts).catch(()=>setPosts([]));
+  };
+  useEffect(()=>{ load(); },[ym]);
+  const byDay=useMemo(()=>{ const m={}; (posts||[]).forEach(p=>{ const k=dayKey(p.publish_at); (m[k]=m[k]||[]).push(p); }); return m; },[posts]);
+  const prev=()=>setYm(s=>s.jm===1?{jy:s.jy-1,jm:12}:{jy:s.jy,jm:s.jm-1});
+  const next=()=>setYm(s=>s.jm===12?{jy:s.jy+1,jm:1}:{jy:s.jy,jm:s.jm+1});
+  const act=async(fn,msg)=>{ try{ await fn(); toast(msg); load(); }catch(e){ toast(e.message,'error'); } };
+  const saveEdit=async()=>{
+    try{ await api.patch('/calendar/'+edit.id,{publishAt:edit.publishAt,caption:edit.caption}); toast('زمان‌بندی به‌روزرسانی شد'); setEdit(null); load(); }
+    catch(e){ toast(e.message,'error'); } };
+  if(posts===null) return <div className="flex justify-center py-20"><Spinner/></div>;
+  const isBoss=['super_admin','content_admin'].includes(user.role);
+  return (<div>
+    <PageTitle title={admin?'تقویم انتشار (مدیریت)':'تقویم محتوایی'} sub="تاریخ و ساعت انتشار محتوا را مدیریت کنید">
+      <div className="flex items-center gap-2">
+        <Button variant="ghost" className="!px-3" onClick={prev}><Ic n="chevR"/></Button>
+        <div className="font-bold min-w-32 text-center">{MONTHS[ym.jm-1]} {faDigits(ym.jy)}</div>
+        <Button variant="ghost" className="!px-3" onClick={next}><Ic n="chevL"/></Button>
+      </div></PageTitle>
+    <div className="grid lg:grid-cols-3 gap-4">
+      <Card className="lg:col-span-2 p-3 md:p-4">
+        <div className="grid grid-cols-7 gap-1.5 mb-2">
+          {WEEKDAYS.map((w,i)=><div key={i} className="text-center text-[11px] text-slate-400 py-1">{w}</div>)}</div>
+        <div className="grid grid-cols-7 gap-1.5">
+          {grid.map((cell,i)=>{
+            const list=byDay[cell.key]||[];
+            const today=cell.key===dayKey(new Date());
+            return <button key={i} onClick={()=>setSelKey(cell.key)}
+              className={'aspect-square md:aspect-[4/3] rounded-xl border p-1.5 text-right transition min-w-0 '+
+                (cell.inMonth?'bg-white/[.03] border-white/10 hover:border-cyan-400/40 ':'opacity-30 ')+
+                (selKey===cell.key?'!border-cyan-400/70 bg-cyan-400/10 ':'')+
+                (today?'ring-1 ring-violet-400/60':'')}>
+              <div className={'text-[11px] md:text-xs '+(today?'text-violet-300 font-bold':'')}>{faDigits(cell.jd)}</div>
+              <div className="mt-1 space-y-0.5">
+                {list.slice(0,2).map(p=><div key={p.id} className={'h-1.5 rounded-full '+(SCHED_STATUS[p.status]?SCHED_STATUS[p.status].dot:'bg-sky-400')}></div>)}
+                {list.length>2&&<div className="text-[9px] text-slate-400">+{faDigits(list.length-2)}</div>}
+              </div></button>;
+          })}
+        </div>
+      </Card>
+      <Card className="p-4 h-fit">
+        <h2 className="font-bold mb-3">{(()=>{ const c=grid.find(x=>x.key===selKey); return c?jDate(c.date):''; })()}</h2>
+        <div className="space-y-2">
+          {(byDay[selKey]||[]).length?byDay[selKey].map(p=><div key={p.id} className="bg-white/[.04] rounded-xl p-3 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-sm font-medium truncate">{p.order_title||p.type}</div><Badge s={p.status} map={SCHED_STATUS}/></div>
+            <div className="text-[11px] text-slate-400 flex items-center gap-1"><Ic n="clock" c="w-3 h-3"/>{jTime(p.publish_at)} · @{p.page_username}{admin&&p.customer_name?' · '+p.customer_name:''}</div>
+            {p.caption&&<div className="text-xs text-slate-400 line-clamp-2">{p.caption}</div>}
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {(p.user_id===user.id||isBoss)&&p.status!=='published'&&
+                <Button variant="ghost" className="!px-2.5 !py-1 !text-[11px]" onClick={()=>setEdit({id:p.id,publishAt:toLocalInput(p.publish_at),caption:p.caption||''})}><Ic n="pencil" c="w-3 h-3"/>جابه‌جایی</Button>}
+              {p.user_id===user.id&&p.status==='scheduled'&&
+                <Button variant="danger" className="!px-2.5 !py-1 !text-[11px]" onClick={()=>act(()=>api.del('/calendar/'+p.id),'حذف شد')}><Ic n="trash" c="w-3 h-3"/>حذف</Button>}
+              {isBoss&&p.status==='scheduled'&&
+                <Button variant="ghost" className="!px-2.5 !py-1 !text-[11px]" onClick={()=>act(()=>api.post('/calendar/'+p.id+'/manual-ready'),'اعلام انتشار دستی شد')}><Ic n="megaphone" c="w-3 h-3"/>انتشار دستی</Button>}
+              {isBoss&&['scheduled','manual_ready'].includes(p.status)&&
+                <Button variant="success" className="!px-2.5 !py-1 !text-[11px]" onClick={()=>act(()=>api.post('/calendar/'+p.id+'/publish'),'انتشار ثبت شد')}>ثبت انتشار</Button>}
+            </div></div>)
+          :<div className="text-xs text-slate-500 py-6 text-center">برای این روز محتوایی زمان‌بندی نشده</div>}
+        </div>
+      </Card>
+    </div>
+    <Modal open={!!edit} onClose={()=>setEdit(null)} title="جابه‌جایی تاریخ و ساعت انتشار">
+      {edit&&<div className="space-y-4">
+        <Input label="تاریخ و ساعت" type="datetime-local" value={edit.publishAt} onChange={e=>setEdit({...edit,publishAt:e.target.value})}/>
+        <Ta label="کپشن" value={edit.caption} onChange={e=>setEdit({...edit,caption:e.target.value})}/>
+        <Button className="w-full" onClick={saveEdit}>ذخیره تغییرات</Button></div>}
+    </Modal>
+  </div>);
+}
+
+/* ═══════════ ۱۸) اشتراک و پرداخت ═══════════ */
+function Subscription({query}){
+  const [me,setMe]=useState(null); const [plans,setPlans]=useState([]); const [gw,setGw]=useState(false);
+  const [busy,setBusy]=useState(null);
+  const load=()=>api.get('/subscriptions/me').then(setMe).catch(()=>{});
+  useEffect(()=>{
+    load();
+    api.get('/plans').then(setPlans).catch(()=>{});
+    api.get('/config').then(c=>setGw(c.gatewayEnabled)).catch(()=>{});
+    if(query.get('pay')==='success') toast('پرداخت با موفقیت انجام شد 🎉');
+    if(query.get('pay')==='fail') toast('پرداخت انجام نشد یا لغو شد','error');
+  },[]);
+  if(!me) return <div className="flex justify-center py-20"><Spinner/></div>;
+  const cur=me.current;
+  const daysLeft=cur&&cur.status==='active'?Math.max(0,Math.ceil((new Date(cur.expires_at)-Date.now())/86400000)):0;
+  const buyGateway=async plan=>{ setBusy('g'+plan.id);
+    try{ const r=await api.post('/subscriptions/checkout',{planId:plan.id}); location.href=r.redirectUrl; }
+    catch(e){ toast(e.message,'error'); setBusy(null); } };
+  const buyManual=async plan=>{ setBusy('m'+plan.id);
+    try{ await api.post('/subscriptions/request-manual',{planId:plan.id}); toast('درخواست ثبت شد؛ پس از واریز، ادمین تأیید می‌کند'); load(); }
+    catch(e){ toast(e.message,'error'); } setBusy(null); };
+  return (<div>
+    <PageTitle title="اشتراک" sub="خرید یا تمدید پلن؛ قیمت‌ها از پنل مدیریت تنظیم می‌شوند"/>
+    <Card className="p-5 mb-6 border-cyan-400/20">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div><div className="font-bold flex items-center gap-2 flex-wrap">وضعیت فعلی:
+          {cur?<span className={'inline-flex rounded-full border border-white/10 px-2.5 py-0.5 text-[11px] '+(SUB_BADGE[cur.status]||'')}>
+            {cur.plan_title} — {cur.status==='active'?'فعال':cur.status==='expired'?'منقضی':cur.status}</span>
+          :<span className="text-slate-400 text-sm">بدون اشتراک</span>}</div>
+          {cur&&cur.status==='active'&&<div className="text-xs text-slate-400 mt-1">{faNum(daysLeft)} روز باقی‌مانده · پایان: {jDate(cur.expires_at)}</div>}
+        </div>
+        {cur&&cur.status==='active'&&<div className="w-full sm:w-56 h-1.5 bg-white/10 rounded-full overflow-hidden">
+          <div className="h-full bg-gradient-to-l from-violet-500 to-cyan-400" style={{width:Math.min(100,(daysLeft/cur.duration_days)*100)+'%'}}></div></div>}
+      </div>
+    </Card>
+    <div className="grid md:grid-cols-3 gap-4">
+      {plans.map(p=>{
+        const isCurrent=cur&&cur.plan_id===p.id&&cur.status==='active';
+        const usedTrial=p.code==='trial'&&me.hadTrial;
+        return <Card key={p.id} className={'p-5 flex flex-col relative overflow-hidden '+(p.code==='pro'?'border-violet-400/50 shadow-glow':'')}>
+          {p.code==='pro'&&<div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-l from-violet-500 to-cyan-400"></div>}
+          <div className="font-bold text-lg flex items-center gap-2">{p.code==='pro'&&<Ic n="sparkles" c="w-4 h-4 text-violet-300"/>}{p.title}</div>
+          <div className="mt-2 text-2xl font-extrabold bg-gradient-to-l from-cyan-300 to-violet-300 bg-clip-text text-transparent">
+            {p.price_toman===0?'رایگان':faNum(p.price_toman)+' تومان'}</div>
+          <div className="text-xs text-slate-400 mt-1">{faNum(p.duration_days)} روزه</div>
+          <ul className="mt-4 space-y-2 flex-1">
+            {(Array.isArray(p.features)?p.features:[]).map((fx,i)=><li key={i} className="flex items-start gap-2 text-sm text-slate-300">
+              <Ic n="check" c="w-4 h-4 text-emerald-400 shrink-0 mt-0.5"/>{fx}</li>)}
+          </ul>
+          <div className="mt-5 space-y-2">
+            {gw&&!isCurrent&&!usedTrial&&<Button className="w-full" variant={p.code==='pro'?'primary':'outline'} loading={busy==='g'+p.id} onClick={()=>buyGateway(p)}>
+              <Ic n="credit"/>پرداخت آنلاین {cur&&cur.status==='active'?'(تمدید)':''}</Button>}
+            {!isCurrent&&!usedTrial&&<Button className="w-full" variant="ghost" loading={busy==='m'+p.id} onClick={()=>buyManual(p)}>
+              <Ic n="send"/>ثبت درخواست (پرداخت دستی)</Button>}
+            {isCurrent&&<Button className="w-full" disabled>پلن فعلی شما</Button>}
+            {usedTrial&&<Button className="w-full" disabled>آزمایشی استفاده شده</Button>}
+          </div>
+        </Card>; })}
+    </div>
+    {me.payments&&me.payments.length>0&&<div className="mt-6">
+      <h2 className="font-bold mb-3">درخواست‌های پرداخت</h2>
+      <Card className="divide-y divide-white/5">
+        {me.payments.map(pa=><div key={pa.id} className="flex flex-wrap items-center justify-between gap-2 p-4">
+          <div className="text-sm">{pa.plan_title} · {faNum(pa.amount)} تومان</div>
+          <div className="text-xs text-slate-400">{pa.method==='manual'?'پرداخت دستی':'درگاه آنلاین'} · {jDate(pa.created_at)}</div>
+          <Badge s={pa.status} map={PAY_STATUS}/></div>)}
+      </Card></div>}
+    <div className="mt-6">
+      <h2 className="font-bold mb-3">تاریخچه اشتراک‌ها</h2>
+      <Card className="divide-y divide-white/5">
+        {me.history.map(h=><div key={h.id} className="flex flex-wrap items-center justify-between gap-2 p-4">
+          <div className="text-sm">{h.plan_title}</div>
+          <div className="text-xs text-slate-400">{jDate(h.starts_at)} تا {jDate(h.expires_at)}</div>
+          <span className={'inline-flex rounded-full border border-white/10 px-2.5 py-0.5 text-[11px] '+(SUB_BADGE[h.status]||'')}>
+            {h.status==='active'?'فعال':h.status==='expired'?'منقضی':h.status}</span></div>)}
+        {!me.history.length&&<div className="p-6 text-center text-sm text-slate-500">سابقه‌ای وجود ندارد</div>}
+      </Card>
+    </div>
+  </div>);
+}
+
+/* ═══════════ ۱۹) اعلان‌ها ═══════════ */
+function Notifications(){
+  const [data,setData]=useState(null);
+  const load=()=>api.get('/notifications').then(setData).catch(()=>setData({rows:[],unread:0}));
+  useEffect(()=>{ load(); },[]);
+  const readAll=async()=>{ await api.post('/notifications/read-all'); toast('همه خوانده شد'); load(); };
+  if(!data) return <div className="flex justify-center py-20"><Spinner/></div>;
+  return (<div>
+    <PageTitle title="اعلان‌ها" sub={data.unread?faNum(data.unread)+' خوانده‌نشده':''}>
+      <Button variant="ghost" onClick={readAll} disabled={!data.unread}>خواندن همه</Button></PageTitle>
+    <div className="space-y-2">
+      {data.rows.length?data.rows.map(n=><Card key={n.id} className={'p-4 flex gap-3 '+(!n.read?'border-cyan-400/30 bg-cyan-400/[.04]':'')}>
+        <div className="w-9 h-9 rounded-xl bg-violet-600/20 flex items-center justify-center shrink-0"><Ic n="bell" c="w-4 h-4 text-cyan-300"/></div>
+        <div className="min-w-0 flex-1"><div className="text-sm font-medium">{n.title}</div>
+          {n.body&&<div className="text-xs text-slate-400 mt-1">{n.body}</div>}
+          <div className="text-[10px] text-slate-500 mt-1">{jDate(n.created_at)} · {jTime(n.created_at)}</div></div>
+        {!n.read&&<span className="w-2 h-2 rounded-full bg-cyan-400 shrink-0 mt-2"></span>}
+      </Card>):<Card><Empty text="اعلانی ندارید"/></Card>}
+    </div>
+  </div>);
+}
+
+/* ═══════════ ۲۰) پنل مدیریت ═══════════ */
+function AdminDashboard(){
+  const [d,setD]=useState(null);
+  useEffect(()=>{ api.get('/admin/stats').then(setD).catch(()=>{}); },[]);
+  if(!d) return <div className="flex justify-center py-20"><Spinner/></div>;
+  const cards=[
+    {l:'مشتریان',v:faNum(d.users),i:'users'},{l:'اشتراک‌های فعال',v:faNum(d.active_subs),i:'credit'},
+    {l:'سفارش‌های در انتظار',v:faNum(d.pending_orders),i:'clipboard'},{l:'درآمد (تومان)',v:faNum(d.revenue),i:'tag'}];
+  return (<div>
+    <PageTitle title="داشبورد مدیریت" sub="نمای کلی کسب‌وکار"/>
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+      {cards.map(c=><Card key={c.l} className="p-4">
+        <div className="flex items-center justify-between"><div className="text-[11px] text-slate-400">{c.l}</div><Ic n={c.i} c="w-4 h-4 text-cyan-400"/></div>
+        <div className="text-2xl font-extrabold mt-2 bg-gradient-to-l from-cyan-300 to-violet-300 bg-clip-text text-transparent">{c.v}</div>
+      </Card>)}
+    </div>
+    {d.pending_payments>0&&<Card className="p-4 mb-6 border-amber-400/30 bg-amber-500/5 flex items-center justify-between gap-3">
+      <div className="text-sm text-amber-200">{faNum(d.pending_payments)} درخواست پرداخت در انتظار تأیید</div>
+      <Link to="/admin/payments"><Button variant="outline" className="!py-1.5">بررسی</Button></Link></Card>}
+    <Card className="p-5">
+      <div className="flex items-center justify-between mb-3"><h2 className="font-bold">آخرین سفارش‌ها</h2>
+      <Link to="/admin/orders" className="text-xs text-cyan-300 hover:underline">همه</Link></div>
+      <div className="space-y-2">
+        {d.recent.map(o=><Link key={o.id} to={'/admin/orders/'+o.id} className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl hover:bg-white/5 transition">
+          <div className="min-w-0"><div className="text-sm truncate">{o.title}</div>
+          <div className="text-[11px] text-slate-400">{o.customer_name} · {ORDER_TYPES[o.type]||o.type} · {jDate(o.created_at)}</div></div>
+          <Badge s={o.status}/></Link>)}
+      </div></Card>
+  </div>);
+}
+
+function AdminOrders(){
+  const {user}=useAuth();
+  const [rows,setRows]=useState(null); const [status,setStatus]=useState('');
+  const [experts,setExperts]=useState([]); const [modal,setModal]=useState(null); const [form,setForm]=useState({});
+  const isBoss=['super_admin','content_admin'].includes(user.role);
+  const load=()=>api.get('/admin/orders'+(status?'?status='+status:'')).then(setRows).catch(()=>setRows([]));
+  useEffect(()=>{ load();
+    if(isBoss) api.get('/admin/experts').then(r=>setExperts(r.filter(x=>['editor','designer'].includes(x.role)))).catch(()=>{});
+  },[status]);
+  const doAction=async()=>{
+    try{
+      if(modal.type==='assign') await api.post('/admin/orders/'+modal.order.id+'/assign',{expertId:form.expertId});
+      if(modal.type==='reject') await api.post('/admin/orders/'+modal.order.id+'/reject',{note:form.note});
+      toast(modal.type==='assign'?'تخصیص انجام شد':'سفارش رد شد'); setModal(null); load();
+    }catch(e){ toast(e.message,'error'); } };
+  if(rows===null) return <div className="flex justify-center py-20"><Spinner/></div>;
+  return (<div>
+    <PageTitle title={isBoss?'مدیریت سفارش‌ها':'سفارش‌های من (کارشناس)'} sub="وضعیت، تخصیص و پیگیری"/>
+    {isBoss&&<div className="flex flex-wrap gap-2 mb-4">
+      <button onClick={()=>setStatus('')} className={'rounded-full border px-3 py-1 text-xs transition '+(!status?'bg-cyan-400/20 border-cyan-400/50 text-cyan-200':'border-white/10 text-slate-400 hover:text-white')}>همه</button>
+      {Object.keys(ORDER_STATUS).map(k=><button key={k} onClick={()=>setStatus(k)}
+        className={'rounded-full border px-3 py-1 text-xs transition '+(status===k?'bg-cyan-400/20 border-cyan-400/50 text-cyan-200':'border-white/10 text-slate-400 hover:text-white')}>{ORDER_STATUS[k].label}</button>)}
+    </div>}
+    <div className="space-y-2">
+      {rows.length?rows.map(o=><Card key={o.id} className="p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <Link to={'/admin/orders/'+o.id} className="min-w-0 flex-1 group">
+            <div className="text-sm font-medium group-hover:text-cyan-300 transition truncate">{o.title}</div>
+            <div className="text-[11px] text-slate-400 mt-0.5">{o.customer_name} · {ORDER_TYPES[o.type]||o.type}{o.page_username?' · @'+o.page_username:''} · {faNum(o.files_count)} فایل · {jDate(o.created_at)}</div>
+          </Link>
+          <div className="flex items-center gap-2 flex-wrap">
+            {o.expert_name&&<span className="text-[11px] text-slate-300 bg-white/5 rounded-lg px-2 py-1">کارشناس: {o.expert_name}</span>}
+            <Badge s={o.status}/>
+            {isBoss&&['pending','assigned'].includes(o.status)&&
+              <Button variant="outline" className="!px-3 !py-1.5 !text-xs" onClick={()=>{setForm({expertId:experts[0]?experts[0].id:''});setModal({type:'assign',order:o});}}><Ic n="usercog" c="w-3.5 h-3.5"/>تخصیص</Button>}
+            {isBoss&&o.status==='pending'&&
+              <Button variant="danger" className="!px-3 !py-1.5 !text-xs" onClick={()=>{setForm({note:''});setModal({type:'reject',order:o});}}>رد</Button>}
+            <Link to={'/admin/orders/'+o.id} className="p-2 text-slate-500 hover:text-cyan-300 transition"><Ic n="chevL" c="w-4 h-4"/></Link>
+          </div></div></Card>)
+      :<Card className="p-8 text-center text-sm text-slate-500">سفارشی در این وضعیت وجود ندارد</Card>}
+    </div>
+    <Modal open={!!modal} onClose={()=>setModal(null)} title={modal&&modal.type==='assign'?'تخصیص به کارشناس':'رد سفارش'}>
+      {modal&&modal.type==='assign'?<div className="space-y-4">
+        <Select label="کارشناس" value={form.expertId||''} onChange={e=>setForm({...form,expertId:e.target.value})}>
+          {experts.map(x=><option key={x.id} value={x.id}>{x.full_name} — {x.role==='editor'?'تدوینگر':'طراح'}</option>)}</Select>
+        <Button className="w-full" onClick={doAction}>ثبت تخصیص</Button></div>
+      :<div className="space-y-4"><Ta label="دلیل رد" value={form.note||''} onChange={e=>setForm({...form,note:e.target.value})}/>
+        <Button variant="danger" className="w-full" onClick={doAction}>رد سفارش</Button></div>}
+    </Modal>
+  </div>);
+}
+
+function AdminUsers(){
+  const {user}=useAuth();
+  const [rows,setRows]=useState(null); const [q,setQ]=useState('');
+  const canBlock=['super_admin','content_admin'].includes(user.role);
+  const load=query=>api.get('/admin/users?q='+encodeURIComponent(query||'')).then(setRows).catch(()=>setRows([]));
+  useEffect(()=>{ load(''); },[]);
+  const block=async u=>{ try{ await api.post('/admin/users/'+u.id+'/block',{blocked:!u.is_blocked});
+    toast(u.is_blocked?'رفع مسدودی انجام شد':'کاربر مسدود شد'); load(q); }catch(e){ toast(e.message,'error'); } };
+  if(rows===null) return <div className="flex justify-center py-20"><Spinner/></div>;
+  return (<div>
+    <PageTitle title="کاربران" sub={faNum(rows.length)+' مشتری'}>
+      <Input placeholder="جستجوی نام یا ایمیل…" className="!w-56" value={q} onChange={e=>setQ(e.target.value)}
+        onKeyDown={e=>{ if(e.key==='Enter') load(q); }}/></PageTitle>
+    <Card className="overflow-x-auto">
+      <table className="w-full text-sm min-w-[760px]">
+        <thead><tr className="text-right text-[11px] text-slate-400 border-b border-white/10">
+          <th className="p-4 font-medium">کاربر</th><th className="p-4 font-medium">پلن</th>
+          <th className="p-4 font-medium">پایان اشتراک</th><th className="p-4 font-medium">سفارش‌ها</th>
+          <th className="p-4 font-medium">ثبت‌نام</th>{canBlock&&<th className="p-4 font-medium">عملیات</th>}</tr></thead>
+        <tbody className="divide-y divide-white/5">
+          {rows.map(u=><tr key={u.id} className={u.is_blocked?'opacity-50':''}>
+            <td className="p-4"><div className="font-medium">{u.full_name}</div><div className="text-xs text-slate-400" dir="ltr">{u.email}</div></td>
+            <td className="p-4">{u.sub_status?<span className={'inline-flex rounded-full border border-white/10 px-2.5 py-0.5 text-[11px] '+(SUB_BADGE[u.sub_status]||'')}>
+              {u.plan_title} · {u.sub_status==='active'?'فعال':u.sub_status==='expired'?'منقضی':u.sub_status}</span>
+              :<span className="text-slate-500 text-xs">—</span>}</td>
+            <td className="p-4 text-xs text-slate-300">{u.expires_at?jDate(u.expires_at):'—'}</td>
+            <td className="p-4 text-xs">{faNum(u.orders_count)}</td>
+            <td className="p-4 text-xs text-slate-400">{jDate(u.created_at)}</td>
+            {canBlock&&<td className="p-4"><Button variant="ghost" className="!px-2.5 !py-1 !text-xs" onClick={()=>block(u)}>
+              <Ic n={u.is_blocked?'shieldcheck':'shieldx'} c="w-3.5 h-3.5"/>{u.is_blocked?'رفع مسدودی':'مسدودسازی'}</Button></td>}
+          </tr>)}
+        </tbody></table>
+    </Card>
+  </div>);
+}
+
+function AdminPayments(){
+  const {user}=useAuth();
+  const [rows,setRows]=useState(null);
+  const load=()=>api.get('/admin/payments').then(setRows).catch(()=>setRows([]));
+  useEffect(()=>{ if(user.role==='super_admin') load(); else setRows([]); },[]);
+  const act=async(id,kind)=>{ try{ await api.post('/admin/payments/'+id+'/'+kind); toast(kind==='confirm'?'پرداخت تأیید و اشتراک فعال شد':'رد شد'); load(); }catch(e){ toast(e.message,'error'); } };
+  if(rows===null) return <div className="flex justify-center py-20"><Spinner/></div>;
+  if(user.role!=='super_admin') return <Card><Empty text="دسترسی غیرمجاز"/></Card>;
+  return (<div>
+    <PageTitle title="مدیریت پرداخت‌ها" sub="تأیید پرداخت‌های دستی پس از واریز"/>
+    <Card className="divide-y divide-white/5">
+      {rows.length?rows.map(pa=><div key={pa.id} className="flex flex-wrap items-center justify-between gap-2 p-4">
+        <div className="min-w-0">
+          <div className="text-sm font-medium">{pa.user_name} — {pa.plan_title}</div>
+          <div className="text-[11px] text-slate-400" dir="ltr">{pa.user_email}</div>
+          <div className="text-[11px] text-slate-400 mt-0.5">{pa.method==='manual'?'پرداخت دستی':'درگاه آنلاین'} · {jDate(pa.created_at)}</div>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-sm font-bold text-cyan-300">{faNum(pa.amount)} تومان</span>
+          <Badge s={pa.status} map={PAY_STATUS}/>
+          {pa.status==='pending'&&<React.Fragment>
+            <Button variant="success" className="!px-3 !py-1.5 !text-xs" onClick={()=>act(pa.id,'confirm')}><Ic n="check" c="w-3.5 h-3.5"/>تأیید واریز</Button>
+            <Button variant="danger" className="!px-3 !py-1.5 !text-xs" onClick={()=>act(pa.id,'reject')}>رد</Button>
+          </React.Fragment>}
+        </div>
+      </div>):<Empty text="پرداختی ثبت نشده"/>}
+    </Card>
+  </div>);
+}
+
+function AdminPlans(){
+  const {user}=useAuth();
+  const [plans,setPlans]=useState(null);
+  const load=()=>api.get('/admin/plans').then(r=>setPlans(r.map(p=>({...p,featuresText:(p.features||[]).join('\n')})))).catch(()=>setPlans([]));
+  useEffect(()=>{ if(user.role==='super_admin') load(); else setPlans([]); },[]);
+  const setPlan=(i,patch)=>setPlans(l=>l.map((x,xi)=>xi===i?{...x,...patch}:x));
+  const save=async p=>{ try{
+    await api.put('/admin/plans/'+p.id,{title:p.title,price_toman:+p.price_toman,duration_days:+p.duration_days,
+      max_pages:+p.max_pages,max_orders_per_period:+p.max_orders_per_period,max_file_size_mb:+p.max_file_size_mb,
+      features:p.featuresText.split('\n').map(s=>s.trim()).filter(Boolean),is_active:p.is_active,sort:+p.sort});
+    toast('پلن ذخیره شد');
+  }catch(e){ toast(e.message,'error'); } };
+  if(plans===null) return <div className="flex justify-center py-20"><Spinner/></div>;
+  if(user.role!=='super_admin') return <Card><Empty text="دسترسی غیرمجاز"/></Card>;
+  return (<div>
+    <PageTitle title="پلن‌ها و قیمت‌گذاری" sub="قیمت، مدت و محدودیت‌ها بلافاصله اعمال می‌شوند"/>
+    <div className="grid lg:grid-cols-3 gap-4">
+      {plans.map((p,i)=><Card key={p.id} className="p-5 space-y-3">
+        <div className="flex items-center justify-between">
+          <Input className="!w-40" value={p.title} onChange={e=>setPlan(i,{title:e.target.value})}/>
+          <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+            <input type="checkbox" checked={p.is_active} onChange={e=>setPlan(i,{is_active:e.target.checked})} className="accent-cyan-400 w-4 h-4"/>فعال</label>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <Input label="قیمت (تومان)" type="number" dir="ltr" value={p.price_toman} onChange={e=>setPlan(i,{price_toman:e.target.value})}/>
+          <Input label="مدت (روز)" type="number" dir="ltr" value={p.duration_days} onChange={e=>setPlan(i,{duration_days:e.target.value})}/>
+          <Input label="حداکثر پیج" type="number" dir="ltr" value={p.max_pages} onChange={e=>setPlan(i,{max_pages:e.target.value})}/>
+          <Input label="سفارش/دوره" type="number" dir="ltr" value={p.max_orders_per_period} onChange={e=>setPlan(i,{max_orders_per_period:e.target.value})}/>
+          <Input label="حجم فایل (MB)" type="number" dir="ltr" value={p.max_file_size_mb} onChange={e=>setPlan(i,{max_file_size_mb:e.target.value})}/>
+          <Input label="ترتیب نمایش" type="number" dir="ltr" value={p.sort} onChange={e=>setPlan(i,{sort:e.target.value})}/>
+        </div>
+        <Ta label="ویژگی‌ها (هر خط یک ویژگی)" rows={5} value={p.featuresText} onChange={e=>setPlan(i,{featuresText:e.target.value})}/>
+        <Button className="w-full" onClick={()=>save(plans[i])}>ذخیره تغییرات</Button>
+      </Card>)}
+    </div>
+  </div>);
+}
+
+function AdminExperts(){
+  const {user}=useAuth();
+  const [rows,setRows]=useState(null); const [open,setOpen]=useState(false); const [busy,setBusy]=useState(false);
+  const [f,setF]=useState({fullName:'',email:'',password:'',role:'editor',specialty:''});
+  const load=()=>api.get('/admin/experts').then(setRows).catch(()=>setRows([]));
+  useEffect(()=>{ load(); },[]);
+  const create=async e=>{ e.preventDefault(); setBusy(true);
+    try{ await api.post('/admin/experts',f); toast('حساب کارشناس ساخته شد');
+      setOpen(false); setF({fullName:'',email:'',password:'',role:'editor',specialty:''}); load(); }
+    catch(err){ toast(err.message,'error'); } finally{ setBusy(false); } };
+  if(rows===null) return <div className="flex justify-center py-20"><Spinner/></div>;
+  return (<div>
+    <PageTitle title="تیم و کارشناسان" sub="حساب جداگانه برای هر نقش با دسترسی نقش‌محور">
+      {user.role==='super_admin'&&<Button onClick={()=>setOpen(true)}><Ic n="plus"/>کارشناس جدید</Button>}</PageTitle>
+    <div className="grid md:grid-cols-2 gap-3">
+      {rows.map(x=><Card key={x.id} className="p-4 flex items-center justify-between gap-3">
+        <div className="min-w-0"><div className="font-medium truncate">{x.full_name}</div>
+          <div className="text-xs text-slate-400" dir="ltr">{x.email}</div>
+          <div className="text-[11px] text-slate-400 mt-1">{ROLE_LABELS[x.role]}{x.specialty?' · '+x.specialty:''} · عضویت {jDate(x.created_at)}</div></div>
+        <div className="text-xs text-cyan-300 shrink-0">{faNum(x.active_orders)} سفارش فعال</div>
+      </Card>)}
+    </div>
+    <Modal open={open} onClose={()=>setOpen(false)} title="ساخت حساب کارشناس">
+      <form onSubmit={create} className="space-y-4">
+        <Input label="نام و نام خانوادگی" required value={f.fullName} onChange={e=>setF({...f,fullName:e.target.value})}/>
+        <Input label="ایمیل" type="email" dir="ltr" required value={f.email} onChange={e=>setF({...f,email:e.target.value})}/>
+        <Input label="رمز عبور اولیه" required value={f.password} onChange={e=>setF({...f,password:e.target.value})}/>
+        <Select label="نقش" value={f.role} onChange={e=>setF({...f,role:e.target.value})}>
+          {['editor','designer','content_admin','support'].map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}</Select>
+        <Input label="تخصص (اختیاری)" placeholder="مثلاً تدوین ریلز" value={f.specialty} onChange={e=>setF({...f,specialty:e.target.value})}/>
+        <Button className="w-full" loading={busy} type="submit">ساخت حساب</Button>
+      </form></Modal>
+  </div>);
+}
+
+function AdminSettings(){
+  const {user}=useAuth();
+  const [size,setSize]=useState(''); const [mimes,setMimes]=useState(''); const [ready,setReady]=useState(false);
+  useEffect(()=>{ if(user.role!=='super_admin'){ setReady(true); return; }
+    api.get('/admin/settings').then(r=>{ setSize(String(r['storage.max_file_size_mb']??''));
+      setMimes((r['storage.allowed_mime']||[]).join('\n')); setReady(true); }).catch(()=>setReady(true)); },[]);
+  const saveSize=async()=>{ try{ await api.put('/admin/settings/storage.max_file_size_mb',{value:+size}); toast('ذخیره شد'); }catch(e){ toast(e.message,'error'); } };
+  const saveMimes=async()=>{ try{ await api.put('/admin/settings/storage.allowed_mime',{value:mimes.split('\n').map(s=>s.trim()).filter(Boolean)}); toast('ذخیره شد'); }catch(e){ toast(e.message,'error'); } };
+  if(!ready) return <div className="flex justify-center py-20"><Spinner/></div>;
+  if(user.role!=='super_admin') return <Card><Empty text="دسترسی غیرمجاز"/></Card>;
+  return (<div>
+    <PageTitle title="تنظیمات فضای ذخیره‌سازی" sub="روی همه پلن‌ها اعمال می‌شود"/>
+    <div className="grid md:grid-cols-2 gap-4">
+      <Card className="p-5 space-y-4">
+        <div className="flex items-center gap-2 font-bold"><Ic n="settings" c="w-4 h-4 text-cyan-300"/>حداکثر حجم فایل</div>
+        <Input label="مگابایت" type="number" dir="ltr" value={size} onChange={e=>setSize(e.target.value)}/>
+        <p className="text-[11px] text-slate-500">سقف نهایی = کمترین مقدار بین این عدد و سقف پلن کاربر</p>
+        <Button onClick={saveSize}>ذخیره</Button></Card>
+      <Card className="p-5 space-y-4">
+        <div className="font-bold">انواع فایل مجاز (MIME)</div>
+        <Ta rows={8} dir="ltr" value={mimes} onChange={e=>setMimes(e.target.value)}/>
+        <p className="text-[11px] text-slate-500">هر خط یک MIME؛ فایل خارج از لیست در آپلود رد می‌شود</p>
+        <Button onClick={saveMimes}>ذخیره</Button></Card>
+    </div>
+  </div>);
+}
+
+function AdminNotify(){
+  const [users,setUsers]=useState(null); const [f,setF]=useState({userId:'',title:'',body:''}); const [busy,setBusy]=useState(false);
+  useEffect(()=>{ api.get('/admin/users').then(setUsers).catch(()=>setUsers([])); },[]);
+  const send=async e=>{ e.preventDefault(); setBusy(true);
+    try{ await api.post('/admin/notify',f); toast('اعلان ارسال شد'); setF({userId:'',title:'',body:''}); }
+    catch(err){ toast(err.message,'error'); } finally{ setBusy(false); } };
+  if(users===null) return <div className="flex justify-center py-20"><Spinner/></div>;
+  return (<div>
+    <PageTitle title="ارسال اعلان" sub="به یک کاربر خاص یا همه مشتریان"/>
+    <Card className="p-5 max-w-lg">
+      <form onSubmit={send} className="space-y-4">
+        <Select label="گیرنده" value={f.userId} onChange={e=>setF({...f,userId:e.target.value})}>
+          <option value="">همه مشتریان</option>
+          {users.map(u=><option key={u.id} value={u.id}>{u.full_name} — {u.email}</option>)}</Select>
+        <Input label="عنوان" required value={f.title} onChange={e=>setF({...f,title:e.target.value})}/>
+        <Ta label="متن (اختیاری)" value={f.body} onChange={e=>setF({...f,body:e.target.value})}/>
+        <Button type="submit" loading={busy}><Ic n="send"/>ارسال</Button>
+      </form></Card>
+  </div>);
+}
+
+/* ═══════════ ۲۱) مسیریابی اصلی ═══════════ */
+function renderCustomer(seg){
+  const p='/'+seg.join('/');
+  if(p==='/dashboard') return <Dashboard/>;
+  if(p==='/pages') return <Pages/>;
+  if(p==='/upload') return <Upload/>;
+  if(p==='/orders') return <Orders/>;
+  if(p==='/orders/new') return <NewOrder/>;
+  if(seg[0]==='orders'&&seg[1]) return <OrderDetail id={seg[1]}/>;
+  if(p==='/calendar') return <CalendarPage/>;
+  if(p==='/notifications') return <Notifications/>;
+  return <Redirect to="/dashboard"/>;
+}
+function renderAdmin(seg){
+  const p='/admin'+(seg.length>1?'/'+seg.slice(1).join('/'):'');
+  if(p==='/admin') return <AdminDashboard/>;
+  if(p==='/admin/orders') return <AdminOrders/>;
+  if(seg[1]==='orders'&&seg[2]) return <OrderDetail id={seg[2]} admin/>;
+  if(p==='/admin/calendar') return <CalendarPage admin/>;
+  if(p==='/admin/users') return <AdminUsers/>;
+  if(p==='/admin/payments') return <AdminPayments/>;
+  if(p==='/admin/plans') return <AdminPlans/>;
+  if(p==='/admin/experts') return <AdminExperts/>;
+  if(p==='/admin/settings') return <AdminSettings/>;
+  if(p==='/admin/notify') return <AdminNotify/>;
+  if(p==='/admin/notifications') return <Notifications/>;
+  return <Redirect to="/admin"/>;
+}
+function App(){
+  const {user,ready}=useAuth();
+  const {path,query}=useRoute();
+  if(!ready) return <div className="min-h-screen flex items-center justify-center"><Spinner/></div>;
+  const seg=path.split('/').filter(Boolean);
+  if(path==='/login'||path==='/register'){
+    if(user) return <Redirect to={homeFor(user.role)}/>;
+    return path==='/login'?<Login/>:<Register/>;
+  }
+  if(!user) return <Redirect to="/login"/>;
+  if(seg.length===0) return <Redirect to={homeFor(user.role)}/>;
+  if(seg[0]==='admin'){
+    if(!ADMIN_ROLES.includes(user.role)) return <Redirect to="/dashboard"/>;
+    if((user.role==='editor'||user.role==='designer')&&seg.length===1) return <Redirect to="/admin/orders"/>;
+    return <Shell>{renderAdmin(seg)}</Shell>;
+  }
+  if(path==='/subscription') return <Shell><Subscription query={query}/></Shell>;
+  if(user.role!=='customer') return <Redirect to={homeFor(user.role)}/>;
+  return <Shell>{renderCustomer(seg)}</Shell>;
+}
+
+function Root(){ return <AuthProvider><ToastHost/><App/></AuthProvider>; }
+ReactDOM.createRoot(document.getElementById('root')).render(<Root/>);
+</script>
+</body>
+</html>
